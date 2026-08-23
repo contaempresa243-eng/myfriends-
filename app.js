@@ -15,85 +15,130 @@ const db = firebase.firestore();
 
 let confirmationResult = null;
 let currentChatId = null;
+let recaptchaVerifier = null;
 
-// Obter número atual (funciona com Firebase real ou com o modo de teste)
+// Obter número atual
 function getCurrentUserPhone() {
   if (auth.currentUser && auth.currentUser.phoneNumber) {
     return auth.currentUser.phoneNumber;
   }
-  return window.mockUser ? window.mockUser.phoneNumber : '+244944602099';
+  return '';
 }
 
-// Detetar Estado de Autenticação (Com suporte a bypass)
+// Detetar Estado de Autenticação
 auth.onAuthStateChanged((user) => {
   if (user) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('main-screen').style.display = 'flex';
     const firstTab = document.querySelector('.tab-item');
-    if(firstTab) switchTab('chats', firstTab);
+    if (firstTab) switchTab('chats', firstTab);
+  } else {
+    document.getElementById('main-screen').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
   }
 });
 
-// Enviar Código SMS (Ativado Bypass para desenvolvimento local)
+// Inicializar o reCAPTCHA invisível (uma única vez)
+function getRecaptchaVerifier() {
+  if (!recaptchaVerifier) {
+    recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
+      size: 'invisible',
+      callback: () => {
+        // reCAPTCHA resolvido — o envio do SMS continua normalmente.
+      },
+      'expired-callback': () => {
+        alert('A verificação expirou. Tenta novamente.');
+        resetRecaptcha();
+      }
+    });
+  }
+  return recaptchaVerifier;
+}
+
+function resetRecaptcha() {
+  if (recaptchaVerifier) {
+    recaptchaVerifier.clear();
+    recaptchaVerifier = null;
+  }
+  const container = document.getElementById('recaptcha-container');
+  if (container) container.innerHTML = '';
+}
+
+// Normaliza o número (aceita "9XX XXX XXX" e assume +244 se faltar o código do país)
+function normalizePhoneNumber(raw) {
+  let phone = raw.replace(/\s+/g, '');
+  if (!phone.startsWith('+')) {
+    phone = phone.startsWith('244') ? '+' + phone : '+244' + phone;
+  }
+  return phone;
+}
+
+// Enviar Código SMS (fluxo real via Firebase Phone Auth)
 function sendOTP() {
-  const phoneNumber = document.getElementById('phone-input').value.replace(/\s+/g, '');
-  
-  if (!phoneNumber) {
+  const phoneInputEl = document.getElementById('phone-input');
+  const rawPhone = phoneInputEl.value.trim();
+
+  if (!rawPhone) {
     alert('Por favor, insere o número de telemóvel.');
     return;
   }
 
-  // Entra diretamente para evitar o erro de SMS do Firebase em localhost
-  bypassLogin();
-}
-
-// Função para pular o SMS e entrar direto no app
-function bypassLogin() {
-  const phoneInput = document.getElementById('phone-input');
-  window.mockUser = { phoneNumber: (phoneInput && phoneInput.value.trim()) ? phoneInput.value.trim() : '+244944602099' };
-  
-  // Esconde o login e mostra o painel principal corretamente
-  document.getElementById('login-screen').style.display = 'none';
-  const mainScreen = document.getElementById('main-screen');
-  mainScreen.style.display = 'flex';
-  mainScreen.style.flexDirection = 'column';
-
-  // Força o carregamento imediato do Chat Geral para o ecrã não ficar vazio
-  const contentArea = document.getElementById('tab-content');
-  if (contentArea) {
-    contentArea.innerHTML = `
-      <div style="padding: 15px; margin: 15px; background: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); cursor: pointer;" onclick="openChat('geral', 'Chat Geral')">
-        <h3 style="color: #075e54; margin: 0 0 5px 0;">💬 Chat Geral da Comunidade</h3>
-        <p style="color: #3b4a54; margin: 0; font-size: 14px;">Clica aqui para entrar na conversa em tempo real.</p>
-      </div>`;
+  const phoneNumber = normalizePhoneNumber(rawPhone);
+  const btn = document.getElementById('btn-send-code');
+  if (btn) {
+    btn.disabled = true;
+    btn.innerText = 'A enviar...';
   }
-}
 
+  const appVerifier = getRecaptchaVerifier();
+
+  auth.signInWithPhoneNumber(phoneNumber, appVerifier)
+    .then((confirmation) => {
+      confirmationResult = confirmation;
+      document.getElementById('otp-container').classList.remove('hidden');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerText = 'Código enviado';
+      }
+      const otpInput = document.getElementById('otp-input');
+      if (otpInput) otpInput.focus();
+    })
+    .catch((error) => {
+      console.error('Erro ao enviar SMS:', error);
+      alert('Não foi possível enviar o código. Verifica o número e tenta novamente.\n' + (error.message || ''));
+      if (btn) {
+        btn.disabled = false;
+        btn.innerText = 'Avançar';
+      }
+      resetRecaptcha();
+    });
+}
 
 // Verificar Código SMS
 function verifyOTP() {
-  const code = document.getElementById('otp-input').value;
-  if (!code) return;
-
-  if (confirmationResult) {
-    confirmationResult.confirm(code).then((result) => {
-      alert('Autenticação bem-sucedida!');
-    }).catch((error) => {
-      console.error('Código inválido:', error);
-      alert('Código SMS incorreto.');
-    });
-  } else {
-    bypassLogin();
+  const code = document.getElementById('otp-input').value.trim();
+  if (!code) {
+    alert('Insere o código de 6 dígitos.');
+    return;
   }
+  if (!confirmationResult) {
+    alert('Pede primeiro o código por SMS.');
+    return;
+  }
+
+  confirmationResult.confirm(code)
+    .then((result) => {
+      // onAuthStateChanged trata da transição de ecrã automaticamente.
+    })
+    .catch((error) => {
+      console.error('Código inválido:', error);
+      alert('Código SMS incorreto. Tenta novamente.');
+    });
 }
 
 function logoutUser() {
-  window.mockUser = null;
-  auth.signOut().then(() => {
-    document.getElementById('main-screen').style.display = 'none';
-    document.getElementById('login-screen').style.display = 'flex';
-  }).catch(() => {
-    bypassLogin();
+  auth.signOut().catch((error) => {
+    console.error('Erro ao terminar sessão:', error);
   });
 }
 
@@ -103,8 +148,8 @@ function switchTab(tabName, element) {
   element.classList.add('active');
 
   const contentArea = document.getElementById('tab-content');
-  
-  if(tabName === 'chats') {
+
+  if (tabName === 'chats') {
     contentArea.innerHTML = `
       <div class="chat-item" onclick="openChat('geral', 'Chat Geral da Comunidade')">
         <div class="avatar" style="background:var(--whatsapp-teal);">GG</div>
@@ -113,11 +158,11 @@ function switchTab(tabName, element) {
           <p>Clica para entrar na conversa em tempo real.</p>
         </div>
       </div>`;
-  } else if(tabName === 'updates') {
+  } else if (tabName === 'updates') {
     contentArea.innerHTML = `<div style="padding: 20px; color: #8696a0; font-size:14px;"><strong>Estados</strong><br><br>Partilha atualizações com os teus amigos.</div>`;
-  } else if(tabName === 'communities') {
+  } else if (tabName === 'communities') {
     contentArea.innerHTML = `<div style="padding: 20px; color: #8696a0; font-size:14px;">Comunidades unificadas do myFriens.</div>`;
-  } else if(tabName === 'calls') {
+  } else if (tabName === 'calls') {
     contentArea.innerHTML = `<div style="padding: 20px; color: #8696a0; font-size:14px;">Histórico de chamadas recentes.</div>`;
   }
 }
@@ -134,7 +179,7 @@ function openChat(chatId, chatName) {
   document.getElementById('chat-room-screen').style.display = 'flex';
   document.getElementById('active-chat-name').innerText = chatName;
   document.getElementById('active-chat-avatar').innerText = chatName.substring(0, 2).toUpperCase();
-  
+
   loadMessages();
 }
 
@@ -147,7 +192,7 @@ function closeChat() {
 function loadMessages() {
   const container = document.getElementById('messages-container');
   const myPhone = getCurrentUserPhone();
-  
+
   db.collection('chats').doc(currentChatId).collection('messages')
     .orderBy('timestamp', 'asc')
     .onSnapshot((snapshot) => {
@@ -155,7 +200,7 @@ function loadMessages() {
       snapshot.forEach((doc) => {
         const msg = doc.data();
         const isMe = msg.sender === myPhone;
-        
+
         const bubble = document.createElement('div');
         bubble.style.cssText = `
           align-self: ${isMe ? 'flex-end' : 'flex-start'};
@@ -179,7 +224,7 @@ function sendFirebaseMessage() {
   const input = document.getElementById('message-input');
   const text = input.value.trim();
   const myPhone = getCurrentUserPhone();
-  if(!text || !currentChatId) return;
+  if (!text || !currentChatId) return;
 
   db.collection('chats').doc(currentChatId).collection('messages').add({
     text: text,
