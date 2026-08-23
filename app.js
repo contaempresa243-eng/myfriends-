@@ -13,14 +13,12 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
-let confirmationResult = null;
 let currentChatId = null;
-let recaptchaVerifier = null;
 
-// Obter número atual
-function getCurrentUserPhone() {
-  if (auth.currentUser && auth.currentUser.phoneNumber) {
-    return auth.currentUser.phoneNumber;
+// Obter identificador do utilizador atual
+function getCurrentUserEmail() {
+  if (auth.currentUser && auth.currentUser.email) {
+    return auth.currentUser.email;
   }
   return '';
 }
@@ -38,105 +36,80 @@ auth.onAuthStateChanged((user) => {
   }
 });
 
-// Inicializar o reCAPTCHA invisível (uma única vez)
-function getRecaptchaVerifier() {
-  if (!recaptchaVerifier) {
-    recaptchaVerifier = new firebase.auth.RecaptchaVerifier('recaptcha-container', {
-      size: 'invisible',
-      callback: () => {
-        // reCAPTCHA resolvido — o envio do SMS continua normalmente.
-      },
-      'expired-callback': () => {
-        alert('A verificação expirou. Tenta novamente.');
-        resetRecaptcha();
-      }
-    });
-  }
-  return recaptchaVerifier;
+// Traduz códigos de erro comuns do Firebase Auth para mensagens em português
+function mensagemErroAuth(error) {
+  const mapa = {
+    'auth/invalid-email': 'Email inválido.',
+    'auth/missing-email': 'Insere o teu email.',
+    'auth/too-many-requests': 'Demasiadas tentativas. Tenta novamente mais tarde.',
+    'auth/expired-action-code': 'Este link expirou. Pede um novo.',
+    'auth/invalid-action-code': 'Este link já foi usado ou é inválido. Pede um novo.'
+  };
+  return mapa[error.code] || (error.message || 'Ocorreu um erro. Tenta novamente.');
 }
 
-function resetRecaptcha() {
-  if (recaptchaVerifier) {
-    recaptchaVerifier.clear();
-    recaptchaVerifier = null;
-  }
-  const container = document.getElementById('recaptcha-container');
-  if (container) container.innerHTML = '';
+function mostrarErroLogin(texto) {
+  const el = document.getElementById('login-error');
+  if (el) el.innerText = texto;
 }
 
-// Normaliza o número (aceita "9XX XXX XXX" e assume +244 se faltar o código do país)
-function normalizePhoneNumber(raw) {
-  let phone = raw.replace(/\s+/g, '');
-  if (!phone.startsWith('+')) {
-    phone = phone.startsWith('244') ? '+' + phone : '+244' + phone;
-  }
-  return phone;
+// Definições do link de login: aponta sempre de volta para esta mesma página.
+function getActionCodeSettings() {
+  return {
+    url: window.location.href.split('?')[0],
+    handleCodeInApp: true
+  };
 }
 
-// Enviar Código SMS (fluxo real via Firebase Phone Auth)
-function sendOTP() {
-  const phoneInputEl = document.getElementById('phone-input');
-  const rawPhone = phoneInputEl.value.trim();
+// Passo 1: enviar o link de login para o email indicado
+function sendLoginLink() {
+  mostrarErroLogin('');
+  const email = document.getElementById('email-input').value.trim();
 
-  if (!rawPhone) {
-    alert('Por favor, insere o número de telemóvel.');
+  if (!email) {
+    mostrarErroLogin('Insere o teu email.');
     return;
   }
 
-  const phoneNumber = normalizePhoneNumber(rawPhone);
-  const btn = document.getElementById('btn-send-code');
-  if (btn) {
-    btn.disabled = true;
-    btn.innerText = 'A enviar...';
-  }
+  const btn = document.getElementById('btn-send-link');
+  if (btn) { btn.disabled = true; btn.innerText = 'A enviar...'; }
 
-  // Limpa e recria o reCAPTCHA em CADA tentativa, para nunca tentar
-  // desenhar um widget novo em cima de um que já existe no mesmo elemento.
-  resetRecaptcha();
-  const appVerifier = getRecaptchaVerifier();
-
-  appVerifier.render()
-    .then(() => auth.signInWithPhoneNumber(phoneNumber, appVerifier))
-    .then((confirmation) => {
-      confirmationResult = confirmation;
-      document.getElementById('otp-container').classList.remove('hidden');
-      if (btn) {
-        btn.disabled = true;
-        btn.innerText = 'Código enviado';
-      }
-      const otpInput = document.getElementById('otp-input');
-      if (otpInput) otpInput.focus();
+  auth.sendSignInLinkToEmail(email, getActionCodeSettings())
+    .then(() => {
+      // Guarda o email localmente para o passo 2 (confirmação ao voltar pelo link).
+      window.localStorage.setItem('myfriens_email_login', email);
+      document.getElementById('email-form').classList.add('hidden');
+      document.getElementById('email-sent-msg').classList.remove('hidden');
     })
     .catch((error) => {
-      console.error('Erro ao enviar SMS:', error);
-      alert('Não foi possível enviar o código. Verifica o número e tenta novamente.\n' + (error.message || ''));
-      if (btn) {
-        btn.disabled = false;
-        btn.innerText = 'Avançar';
-      }
-      resetRecaptcha();
+      console.error('Erro ao enviar link:', error);
+      mostrarErroLogin(mensagemErroAuth(error));
+    })
+    .finally(() => {
+      if (btn) { btn.disabled = false; btn.innerText = 'Enviar Link de Entrada'; }
     });
 }
 
-// Verificar Código SMS
-function verifyOTP() {
-  const code = document.getElementById('otp-input').value.trim();
-  if (!code) {
-    alert('Insere o código de 6 dígitos.');
-    return;
-  }
-  if (!confirmationResult) {
-    alert('Pede primeiro o código por SMS.');
-    return;
-  }
+// Passo 2: se a página foi aberta a partir do link de login, completa a entrada
+function completarLoginPorLink() {
+  if (!auth.isSignInWithEmailLink(window.location.href)) return;
 
-  confirmationResult.confirm(code)
-    .then((result) => {
-      // onAuthStateChanged trata da transição de ecrã automaticamente.
+  let email = window.localStorage.getItem('myfriens_email_login');
+  if (!email) {
+    // Link aberto noutro dispositivo/navegador — pede o email outra vez.
+    email = window.prompt('Confirma o teu email para completares a entrada:');
+  }
+  if (!email) return;
+
+  auth.signInWithEmailLink(email, window.location.href)
+    .then(() => {
+      window.localStorage.removeItem('myfriens_email_login');
+      // Limpa o link da barra de endereço sem recarregar a página.
+      window.history.replaceState({}, document.title, window.location.pathname);
     })
     .catch((error) => {
-      console.error('Código inválido:', error);
-      alert('Código SMS incorreto. Tenta novamente.');
+      console.error('Erro ao confirmar login por link:', error);
+      mostrarErroLogin(mensagemErroAuth(error));
     });
 }
 
@@ -145,6 +118,8 @@ function logoutUser() {
     console.error('Erro ao terminar sessão:', error);
   });
 }
+
+completarLoginPorLink();
 
 // Navegação por Abas
 function switchTab(tabName, element) {
@@ -195,7 +170,7 @@ function closeChat() {
 // Firestore: Carregar Mensagens em Tempo Real
 function loadMessages() {
   const container = document.getElementById('messages-container');
-  const myPhone = getCurrentUserPhone();
+  const myEmail = getCurrentUserEmail();
 
   db.collection('chats').doc(currentChatId).collection('messages')
     .orderBy('timestamp', 'asc')
@@ -203,7 +178,7 @@ function loadMessages() {
       container.innerHTML = '';
       snapshot.forEach((doc) => {
         const msg = doc.data();
-        const isMe = msg.sender === myPhone;
+        const isMe = msg.sender === myEmail;
 
         const bubble = document.createElement('div');
         bubble.style.cssText = `
@@ -227,12 +202,12 @@ function loadMessages() {
 function sendFirebaseMessage() {
   const input = document.getElementById('message-input');
   const text = input.value.trim();
-  const myPhone = getCurrentUserPhone();
+  const myEmail = getCurrentUserEmail();
   if (!text || !currentChatId) return;
 
   db.collection('chats').doc(currentChatId).collection('messages').add({
     text: text,
-    sender: myPhone,
+    sender: myEmail,
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
   }).then(() => {
     input.value = '';

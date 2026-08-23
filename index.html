@@ -18,25 +18,24 @@
 
   <div class="app-container">
     
-    <!-- Ecrã de Login / Número de Telemóvel -->
+    <!-- Ecrã de Login / Email -->
     <div id="login-screen" class="screen" style="display:flex; flex-direction:column; justify-content:center; padding:30px; height:100%; text-align:center;">
       <div style="font-size:40px; color:var(--whatsapp-teal); margin-bottom:20px;"><i class="fa-solid fa-comments"></i></div>
       <h2 style="color:#e9edef; margin-bottom:10px;">myFriens</h2>
-      <p style="color:#8696a0; font-size:14px; margin-bottom:30px;">Insere o teu número de telemóvel com o código do país para entrar.</p>
-      
-      <input type="tel" id="phone-input" placeholder="+244 9XX XXX XXX" style="width:100%; padding:14px; background:#2a3942; border:none; border-radius:8px; color:#fff; font-size:16px; margin-bottom:15px; text-align:center; outline:none;">
-      
-      <button id="btn-send-code" onclick="sendOTP()"
- style="width:100%; padding:14px; background:var(--whatsapp-teal); border:none; border-radius:8px; color:#fff; font-weight:bold; font-size:16px; cursor:pointer; margin-bottom:15px;">Avançar</button>
-      
-      <!-- Campo de confirmação do Código SMS (Oculto inicialmente) -->
-      <div id="otp-container" class="hidden">
-        <input type="text" id="otp-input" placeholder="Código de 6 dígitos" style="width:100%; padding:14px; background:#2a3942; border:none; border-radius:8px; color:#fff; font-size:16px; margin-bottom:15px; text-align:center; outline:none;">
-        <button onclick="verifyOTP()" style="width:100%; padding:14px; background:var(--whatsapp-teal); border:none; border-radius:8px; color:#fff; font-weight:bold; font-size:16px; cursor:pointer;">Confirmar Código</button>
+      <p style="color:#8696a0; font-size:14px; margin-bottom:30px;">Insere o teu email. Vamos enviar-te um link para entrares, sem precisares de palavra-passe.</p>
+
+      <div id="email-form">
+        <input type="email" id="email-input" placeholder="Email" autocomplete="email" style="width:100%; padding:14px; background:#2a3942; border:none; border-radius:8px; color:#fff; font-size:16px; margin-bottom:15px; text-align:center; outline:none;">
+
+        <button id="btn-send-link" onclick="sendLoginLink()"
+ style="width:100%; padding:14px; background:var(--whatsapp-teal); border:none; border-radius:8px; color:#fff; font-weight:bold; font-size:16px; cursor:pointer;">Enviar Link de Entrada</button>
       </div>
 
-      <!-- Container invisível obrigatório para o reCAPTCHA do Firebase -->
-      <div id="recaptcha-container"></div>
+      <div id="email-sent-msg" class="hidden" style="color:#8696a0; font-size:14px; margin-top:10px;">
+        Enviámos um link para o teu email. Abre-o neste mesmo telemóvel/navegador para entrares.
+      </div>
+
+      <p id="login-error" style="color:#f15c6d; font-size:13px; margin-top:15px; min-height:16px;"></p>
     </div>
 
     <!-- Ecrã Principal (Oculto até fazer login) -->
