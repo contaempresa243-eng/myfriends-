@@ -49,12 +49,26 @@ function sendOTP() {
 
 // Função para pular o SMS e entrar direto no app
 function bypassLogin() {
-  window.mockUser = { phoneNumber: document.getElementById('phone-input').value.trim() || '+244944602099' };
+  const phoneInput = document.getElementById('phone-input');
+  window.mockUser = { phoneNumber: (phoneInput && phoneInput.value.trim()) ? phoneInput.value.trim() : '+244944602099' };
+  
+  // Esconde o login e mostra o painel principal corretamente
   document.getElementById('login-screen').style.display = 'none';
-  document.getElementById('main-screen').style.display = 'flex';
-  const firstTab = document.querySelector('.tab-item');
-  if(firstTab) switchTab('chats', firstTab);
+  const mainScreen = document.getElementById('main-screen');
+  mainScreen.style.display = 'flex';
+  mainScreen.style.flexDirection = 'column';
+
+  // Força o carregamento imediato do Chat Geral para o ecrã não ficar vazio
+  const contentArea = document.getElementById('tab-content');
+  if (contentArea) {
+    contentArea.innerHTML = `
+      <div style="padding: 15px; margin: 15px; background: #ffffff; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); cursor: pointer;" onclick="openChat('geral', 'Chat Geral')">
+        <h3 style="color: #075e54; margin: 0 0 5px 0;">💬 Chat Geral da Comunidade</h3>
+        <p style="color: #3b4a54; margin: 0; font-size: 14px;">Clica aqui para entrar na conversa em tempo real.</p>
+      </div>`;
+  }
 }
+
 
 // Verificar Código SMS
 function verifyOTP() {
