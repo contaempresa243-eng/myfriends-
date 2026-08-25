@@ -90,11 +90,13 @@
         <!-- Mensagens em tempo real injetadas aqui -->
       </div>
       
-      <div style="flex-shrink:0; padding:8px 10px; background:var(--whatsapp-panel); display:flex; align-items:center;">
-        <span class="fa-solid fa-plus" onclick="triggerFileUpload()" style="margin-right:10px; color:#aebac1; font-size:18px; cursor:pointer;"></span>
-        <input type="text" id="message-input" placeholder="Mensagem" style="flex:1; padding:8px 12px; background:#2a3942; border:none; border-radius:8px; color:#fff; outline:none; font-size:14px;">
-        <span class="fa-solid fa-paperclip" onclick="triggerFileUpload()" style="margin-left:10px; color:#aebac1; font-size:18px; cursor:pointer;"></span>
-        <span class="fa-solid fa-paper-plane" style="margin-left:10px; color:var(--whatsapp-teal); font-size:18px; cursor:pointer;" onclick="sendFirebaseMessage()"></span>
+      <div style="flex-shrink:0; padding:5px 8px; background:var(--whatsapp-panel); display:flex; align-items:center;">
+        <div style="flex:1; display:flex; align-items:center; background:#2a3942; border-radius:18px; padding:3px 6px 3px 10px;">
+          <span class="fa-solid fa-plus" onclick="triggerFileUpload()" style="margin-right:7px; color:#aebac1; font-size:14px; cursor:pointer; flex-shrink:0;"></span>
+          <input type="text" id="message-input" placeholder="Mensagem" style="flex:1; min-width:0; padding:5px 0; background:transparent; border:none; color:#fff; outline:none; font-size:13px;">
+          <span class="fa-solid fa-paperclip" onclick="triggerFileUpload()" style="margin-left:7px; color:#aebac1; font-size:14px; cursor:pointer; flex-shrink:0;"></span>
+        </div>
+        <span class="fa-solid fa-paper-plane" style="margin-left:7px; color:var(--whatsapp-teal); font-size:16px; cursor:pointer; flex-shrink:0;" onclick="sendFirebaseMessage()"></span>
       </div>
     </div>
 
