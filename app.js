@@ -212,6 +212,9 @@ function loadMessages() {
         container.appendChild(bubble);
       });
       container.scrollTop = container.scrollHeight;
+    }, (error) => {
+      console.error('Erro ao carregar mensagens:', error);
+      container.innerHTML = '<p style="text-align:center;color:#8696a0;font-size:13px;">Não foi possível carregar as mensagens. Verifica as regras de segurança do Firestore.</p>';
     });
 }
 
@@ -228,8 +231,24 @@ function sendFirebaseMessage() {
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
   }).then(() => {
     input.value = '';
-  }).catch(err => console.error('Erro ao enviar mensagem:', err));
+  }).catch(err => {
+    console.error('Erro ao enviar mensagem:', err);
+    alert('Não foi possível enviar a mensagem. Verifica as regras de segurança do Firestore.');
+  });
 }
+
+// Enviar com a tecla Enter
+document.addEventListener('DOMContentLoaded', () => {
+  const messageInput = document.getElementById('message-input');
+  if (messageInput) {
+    messageInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        sendFirebaseMessage();
+      }
+    });
+  }
+});
 
 function startVoiceCall() { alert('A iniciar chamada...'); }
 function startVideoCall() { alert('A iniciar videochamada...'); }
