@@ -94,18 +94,35 @@ function sendLoginLink() {
 function completarLoginPorLink() {
   if (!auth.isSignInWithEmailLink(window.location.href)) return;
 
-  let email = window.localStorage.getItem('myfriens_email_login');
-  if (!email) {
-    // Link aberto noutro dispositivo/navegador — pede o email outra vez.
-    email = window.prompt('Confirma o teu email para completares a entrada:');
+  const email = window.localStorage.getItem('myfriens_email_login');
+  if (email) {
+    confirmarLoginComEmail(email);
+  } else {
+    // Link aberto noutro dispositivo/navegador — pede o email através de um formulário na página
+    // (evita window.prompt, que pode não funcionar dentro de navegadores embutidos de apps como Gmail).
+    document.getElementById('email-form').classList.add('hidden');
+    document.getElementById('confirm-email-form').classList.remove('hidden');
   }
-  if (!email) return;
+}
 
+function confirmarEmailEEntrar() {
+  const email = document.getElementById('confirm-email-input').value.trim();
+  mostrarErroLogin('');
+  if (!email) {
+    mostrarErroLogin('Insere o teu email.');
+    return;
+  }
+  confirmarLoginComEmail(email);
+}
+
+function confirmarLoginComEmail(email) {
+  mostrarErroLogin('A entrar...');
   auth.signInWithEmailLink(email, window.location.href)
     .then(() => {
       window.localStorage.removeItem('myfriens_email_login');
       // Limpa o link da barra de endereço sem recarregar a página.
       window.history.replaceState({}, document.title, window.location.pathname);
+      mostrarErroLogin('');
     })
     .catch((error) => {
       console.error('Erro ao confirmar login por link:', error);
@@ -221,6 +238,6 @@ function triggerFileUpload() { alert('Módulo Cloudinary pronto para anexar fich
 // Service Worker PWA
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js').catch(err => console.log('Erro SW:', err));
+    navigator.serviceWorker.register('sw.js').catch(err => console.log('Erro SW:', err));
   });
 }
