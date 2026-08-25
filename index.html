@@ -7,13 +7,19 @@
 
   <!-- Captura de erros visível na página (temporário, para diagnóstico) -->
   <script>
+    window.__errosPagina = [];
     window.addEventListener('error', function(e) {
-      var msg = e.message || (e.target && (e.target.src || e.target.href) + ' falhou a carregar');
-      var caixa = document.createElement('div');
-      caixa.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c41e3a;color:#fff;padding:10px;font-size:12px;z-index:99999;word-break:break-word;';
-      caixa.innerText = 'ERRO: ' + msg;
-      document.body.appendChild(caixa);
+      var msg = e.message || ((e.target && (e.target.src || e.target.href)) + ' falhou a carregar');
+      window.__errosPagina.push(msg);
     }, true);
+    document.addEventListener('DOMContentLoaded', function() {
+      if (window.__errosPagina.length) {
+        var caixa = document.createElement('div');
+        caixa.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c41e3a;color:#fff;padding:10px;font-size:12px;z-index:99999;word-break:break-word;max-height:200px;overflow:auto;';
+        caixa.innerText = 'ERROS: ' + window.__errosPagina.join(' | ');
+        document.body.appendChild(caixa);
+      }
+    });
   </script>
 
   <link rel="stylesheet" href="style.css">
@@ -22,9 +28,9 @@
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
   
   <!-- Firebase SDKs (Compat) -->
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
-  <script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-auth-compat.js"></script>
+  <script defer src="https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
 
@@ -110,6 +116,6 @@
 
   </div>
 
-  <script src="app.js"></script>
+  <script defer src="app.js"></script>
 </body>
 </html>
