@@ -4,6 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>myFriens</title>
+
+  <!-- Captura de erros visível na página (temporário, para diagnóstico) -->
+  <script>
+    window.addEventListener('error', function(e) {
+      var msg = e.message || (e.target && (e.target.src || e.target.href) + ' falhou a carregar');
+      var caixa = document.createElement('div');
+      caixa.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#c41e3a;color:#fff;padding:10px;font-size:12px;z-index:99999;word-break:break-word;';
+      caixa.innerText = 'ERRO: ' + msg;
+      document.body.appendChild(caixa);
+    }, true);
+  </script>
+
   <link rel="stylesheet" href="style.css">
 
   <link rel="manifest" href="manifest.json">
@@ -29,6 +41,14 @@
 
         <button id="btn-send-link" onclick="sendLoginLink()"
  style="width:100%; padding:14px; background:var(--whatsapp-teal); border:none; border-radius:8px; color:#fff; font-weight:bold; font-size:16px; cursor:pointer;">Enviar Link de Entrada</button>
+      </div>
+
+      <!-- Mostrado quando o link é aberto num navegador/dispositivo diferente do que pediu o link -->
+      <div id="confirm-email-form" class="hidden">
+        <p style="color:#8696a0; font-size:14px; margin-bottom:15px;">Confirma o teu email para completares a entrada:</p>
+        <input type="email" id="confirm-email-input" placeholder="Email" autocomplete="email" style="width:100%; padding:14px; background:#2a3942; border:none; border-radius:8px; color:#fff; font-size:16px; margin-bottom:15px; text-align:center; outline:none;">
+        <button id="btn-confirm-email" onclick="confirmarEmailEEntrar()"
+ style="width:100%; padding:14px; background:var(--whatsapp-teal); border:none; border-radius:8px; color:#fff; font-weight:bold; font-size:16px; cursor:pointer;">Confirmar e Entrar</button>
       </div>
 
       <div id="email-sent-msg" class="hidden" style="color:#8696a0; font-size:14px; margin-top:10px;">
