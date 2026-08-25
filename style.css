@@ -18,6 +18,10 @@
   font-family: 'Segoe UI', Helvetica, Arial, sans-serif;
 }
 
+html {
+  height: 100%;
+}
+
 body {
   background-color: var(--whatsapp-dark);
   color: #fff;
@@ -25,14 +29,18 @@ body {
   justify-content: center;
   align-items: center;
   height: 100vh;
-  overflow: hidden;
+  height: 100dvh; /* usa a altura real visível quando o navegador/app suporta, evitando conteúdo cortado */
+  min-height: 100%;
+  overflow-y: auto; /* recurso: se algo ainda ultrapassar o ecrã, dá para deslizar em vez de ficar inacessível */
 }
 
 /* App Container (Mobile PWA Style) */
 .app-container {
   width: 100%;
   max-width: 480px;
-  height: 100%;
+  height: 100vh;
+  height: 100dvh;
+  min-height: 100%;
   background-color: var(--whatsapp-panel);
   display: flex;
   flex-direction: column;
@@ -47,6 +55,7 @@ header {
   justify-content: space-between;
   align-items: center;
   border-bottom: 1px solid #2a3942;
+  flex-shrink: 0;
 }
 
 header h1 {
@@ -69,6 +78,7 @@ header h1 {
   white-space: nowrap;
   border-bottom: 1px solid #2a3942;
   scrollbar-width: none; /* Oculta a barra de scroll no Firefox */
+  flex-shrink: 0;
 }
 
 .nav-tabs::-webkit-scrollbar {
@@ -105,6 +115,7 @@ header h1 {
   flex: 1;
   overflow-y: auto;
   background-color: #111b21;
+  min-height: 0;
 }
 
 /* Chat List Item */
