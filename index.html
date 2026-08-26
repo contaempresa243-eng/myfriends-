@@ -90,19 +90,34 @@
         <!-- Mensagens em tempo real injetadas aqui -->
       </div>
       
-      <!-- Menu de Anexo -->
-      <div id="attach-menu" class="hidden" style="position:absolute; bottom:60px; left:10px; background:var(--whatsapp-panel); border:1px solid #2a3942; border-radius:10px; box-shadow:0 4px 15px rgba(0,0,0,0.4); padding:8px; z-index:200; display:flex; flex-direction:column; gap:2px; width:190px;">
-        <div onclick="selecionarGaleria()" style="display:flex; align-items:center; gap:12px; padding:10px; cursor:pointer; border-radius:6px; color:#e9edef; font-size:14px;">
-          <span class="fa-solid fa-image" style="color:#a682e3; font-size:18px; width:20px; text-align:center;"></span>Galeria
-        </div>
-        <div onclick="selecionarCamara()" style="display:flex; align-items:center; gap:12px; padding:10px; cursor:pointer; border-radius:6px; color:#e9edef; font-size:14px;">
-          <span class="fa-solid fa-camera" style="color:#e17055; font-size:18px; width:20px; text-align:center;"></span>Câmara
-        </div>
-        <div onclick="selecionarContacto()" style="display:flex; align-items:center; gap:12px; padding:10px; cursor:pointer; border-radius:6px; color:#e9edef; font-size:14px;">
-          <span class="fa-solid fa-address-book" style="color:#00a884; font-size:18px; width:20px; text-align:center;"></span>Contactos
-        </div>
-        <div onclick="selecionarDocumento()" style="display:flex; align-items:center; gap:12px; padding:10px; cursor:pointer; border-radius:6px; color:#e9edef; font-size:14px;">
-          <span class="fa-solid fa-file-lines" style="color:#4a90d9; font-size:18px; width:20px; text-align:center;"></span>Documentos
+      <!-- Menu de Anexo (estilo WhatsApp: bottom sheet com ícones circulares) -->
+      <div id="attach-menu" class="hidden" style="position:absolute; bottom:0; left:0; right:0; background:var(--whatsapp-panel); border-radius:16px 16px 0 0; box-shadow:0 -4px 15px rgba(0,0,0,0.4); padding:16px 14px 22px; z-index:200;">
+        <div style="width:36px; height:4px; background:#3b4a54; border-radius:2px; margin:0 auto 18px;"></div>
+        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:10px;">
+          <div onclick="selecionarGaleria()" style="display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer;">
+            <div style="width:52px; height:52px; border-radius:50%; background:#a682e3; display:flex; align-items:center; justify-content:center;">
+              <span class="fa-solid fa-image" style="color:#fff; font-size:21px;"></span>
+            </div>
+            <span style="color:#e9edef; font-size:12px; text-align:center;">Galeria</span>
+          </div>
+          <div onclick="selecionarCamara()" style="display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer;">
+            <div style="width:52px; height:52px; border-radius:50%; background:#e17055; display:flex; align-items:center; justify-content:center;">
+              <span class="fa-solid fa-camera" style="color:#fff; font-size:21px;"></span>
+            </div>
+            <span style="color:#e9edef; font-size:12px; text-align:center;">Câmara</span>
+          </div>
+          <div onclick="selecionarContacto()" style="display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer;">
+            <div style="width:52px; height:52px; border-radius:50%; background:#00a884; display:flex; align-items:center; justify-content:center;">
+              <span class="fa-solid fa-address-book" style="color:#fff; font-size:21px;"></span>
+            </div>
+            <span style="color:#e9edef; font-size:12px; text-align:center;">Contactos</span>
+          </div>
+          <div onclick="selecionarDocumento()" style="display:flex; flex-direction:column; align-items:center; gap:6px; cursor:pointer;">
+            <div style="width:52px; height:52px; border-radius:50%; background:#4a90d9; display:flex; align-items:center; justify-content:center;">
+              <span class="fa-solid fa-file-lines" style="color:#fff; font-size:21px;"></span>
+            </div>
+            <span style="color:#e9edef; font-size:12px; text-align:center;">Documentos</span>
+          </div>
         </div>
       </div>
 
