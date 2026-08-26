@@ -73,7 +73,7 @@
     </div>
 
     <!-- Ecrã de Conversa Detalhada -->
-    <div id="chat-room-screen" class="screen" style="display:none; flex-direction:column; height:100%; background:var(--whatsapp-chat-bg);">
+    <div id="chat-room-screen" class="screen" style="display:none; flex-direction:column; height:100%; background:var(--whatsapp-chat-bg); position:relative;">
       <header style="background:var(--whatsapp-panel);">
         <div style="display:flex; align-items:center; flex:1; min-width:0;">
           <span class="fa-solid fa-arrow-left" onclick="closeChat()" style="margin-right:15px; cursor:pointer; color:#aebac1; flex-shrink:0;"></span>
@@ -90,11 +90,32 @@
         <!-- Mensagens em tempo real injetadas aqui -->
       </div>
       
+      <!-- Menu de Anexo -->
+      <div id="attach-menu" class="hidden" style="position:absolute; bottom:60px; left:10px; background:var(--whatsapp-panel); border:1px solid #2a3942; border-radius:10px; box-shadow:0 4px 15px rgba(0,0,0,0.4); padding:8px; z-index:200; display:flex; flex-direction:column; gap:2px; width:190px;">
+        <div onclick="selecionarGaleria()" style="display:flex; align-items:center; gap:12px; padding:10px; cursor:pointer; border-radius:6px; color:#e9edef; font-size:14px;">
+          <span class="fa-solid fa-image" style="color:#a682e3; font-size:18px; width:20px; text-align:center;"></span>Galeria
+        </div>
+        <div onclick="selecionarCamara()" style="display:flex; align-items:center; gap:12px; padding:10px; cursor:pointer; border-radius:6px; color:#e9edef; font-size:14px;">
+          <span class="fa-solid fa-camera" style="color:#e17055; font-size:18px; width:20px; text-align:center;"></span>Câmara
+        </div>
+        <div onclick="selecionarContacto()" style="display:flex; align-items:center; gap:12px; padding:10px; cursor:pointer; border-radius:6px; color:#e9edef; font-size:14px;">
+          <span class="fa-solid fa-address-book" style="color:#00a884; font-size:18px; width:20px; text-align:center;"></span>Contactos
+        </div>
+        <div onclick="selecionarDocumento()" style="display:flex; align-items:center; gap:12px; padding:10px; cursor:pointer; border-radius:6px; color:#e9edef; font-size:14px;">
+          <span class="fa-solid fa-file-lines" style="color:#4a90d9; font-size:18px; width:20px; text-align:center;"></span>Documentos
+        </div>
+      </div>
+
+      <!-- Inputs de ficheiro escondidos, acionados pelo menu de anexo -->
+      <input type="file" id="input-galeria" accept="image/*" style="display:none">
+      <input type="file" id="input-camara" accept="image/*" capture="environment" style="display:none">
+      <input type="file" id="input-documento" style="display:none">
+
       <div style="flex-shrink:0; padding:5px 8px; background:var(--whatsapp-panel); display:flex; align-items:center;">
         <div style="flex:1; display:flex; align-items:center; background:rgba(42,57,66,0.55); backdrop-filter:blur(4px); border-radius:18px; padding:3px 6px 3px 10px;">
-          <span class="fa-solid fa-plus" onclick="triggerFileUpload()" style="margin-right:7px; color:#aebac1; font-size:14px; cursor:pointer; flex-shrink:0;"></span>
+          <span class="fa-solid fa-plus" onclick="toggleAttachMenu()" style="margin-right:7px; color:#aebac1; font-size:14px; cursor:pointer; flex-shrink:0;"></span>
           <input type="text" id="message-input" placeholder="Mensagem" style="flex:1; min-width:0; padding:5px 0; background:transparent; border:none; color:#fff; outline:none; font-size:13px;">
-          <span class="fa-solid fa-paperclip" onclick="triggerFileUpload()" style="margin-left:7px; color:#aebac1; font-size:14px; cursor:pointer; flex-shrink:0;"></span>
+          <span class="fa-solid fa-paperclip" onclick="toggleAttachMenu()" style="margin-left:7px; color:#aebac1; font-size:14px; cursor:pointer; flex-shrink:0;"></span>
         </div>
         <span class="fa-solid fa-paper-plane" style="margin-left:7px; color:var(--whatsapp-teal); font-size:16px; cursor:pointer; flex-shrink:0;" onclick="sendFirebaseMessage()"></span>
       </div>
