@@ -186,6 +186,10 @@ header h1 {
   background-color: #182229;
 }
 
+#attach-menu > div:active {
+  background-color: #182229;
+}
+
 /* Tab Item Refinement */
 .tab-item {
   flex: 1;
