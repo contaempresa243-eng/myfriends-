@@ -13,6 +13,10 @@ firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.firestore();
 
+// Cloudinary (upload de imagens/documentos, sem precisar de plano pago)
+const CLOUDINARY_CLOUD_NAME = 'dghec1t8e';
+const CLOUDINARY_UPLOAD_PRESET = 'myFriens';
+
 let currentChatId = null;
 
 // Obter identificador do utilizador atual
@@ -184,6 +188,40 @@ function closeChat() {
   document.getElementById('main-screen').style.display = 'flex';
 }
 
+// Constrói o conteúdo interno de um balão consoante o tipo de mensagem
+function construirConteudoMensagem(msg) {
+  if (msg.type === 'imagem') {
+    const img = document.createElement('img');
+    img.src = msg.url;
+    img.style.cssText = 'max-width:100%; border-radius:8px; display:block; cursor:pointer;';
+    img.onclick = () => window.open(msg.url, '_blank');
+    return img;
+  }
+
+  if (msg.type === 'documento') {
+    const link = document.createElement('a');
+    link.href = msg.url;
+    link.target = '_blank';
+    link.style.cssText = 'display:flex; align-items:center; gap:8px; color:#111; text-decoration:none; font-size:14px;';
+    link.innerHTML = '<i class="fa-solid fa-file-lines" style="font-size:20px;"></i><span style="word-break:break-word;">' +
+      (msg.nomeFicheiro || 'Documento') + '</span>';
+    return link;
+  }
+
+  if (msg.type === 'contacto') {
+    const card = document.createElement('div');
+    card.style.cssText = 'display:flex; align-items:center; gap:10px; min-width:150px;';
+    card.innerHTML = '<i class="fa-solid fa-address-card" style="font-size:24px; color:#00a884;"></i>' +
+      '<div><div style="font-weight:bold;">' + (msg.nomeContacto || 'Contacto') + '</div>' +
+      '<div style="font-size:12px; color:#3b4a54;">' + (msg.telefoneContacto || '') + '</div></div>';
+    return card;
+  }
+
+  const span = document.createElement('span');
+  span.innerText = msg.text || '';
+  return span;
+}
+
 // Firestore: Carregar Mensagens em Tempo Real
 function loadMessages() {
   const container = document.getElementById('messages-container');
@@ -202,13 +240,13 @@ function loadMessages() {
           align-self: ${isMe ? 'flex-end' : 'flex-start'};
           background: ${isMe ? 'var(--whatsapp-outgoing)' : 'var(--whatsapp-incoming)'};
           color: #111;
-          padding: 8px 12px;
+          padding: ${msg.type === 'imagem' ? '4px' : '8px 12px'};
           border-radius: 7px;
           max-width: 70%;
           font-size: 14px;
           word-break: break-word;
         `;
-        bubble.innerText = msg.text;
+        bubble.appendChild(construirConteudoMensagem(msg));
         container.appendChild(bubble);
       });
       container.scrollTop = container.scrollHeight;
@@ -252,7 +290,134 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function startVoiceCall() { alert('A iniciar chamada...'); }
 function startVideoCall() { alert('A iniciar videochamada...'); }
-function triggerFileUpload() { alert('Módulo Cloudinary pronto para anexar ficheiros.'); }
+
+// Menu de Anexo (Galeria / Câmara / Contactos / Documentos)
+function toggleAttachMenu() {
+  document.getElementById('attach-menu').classList.toggle('hidden');
+}
+
+function fecharAttachMenu() {
+  document.getElementById('attach-menu').classList.add('hidden');
+}
+
+// Fecha o menu ao tocar fora dele
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('attach-menu');
+  if (!menu || menu.classList.contains('hidden')) return;
+  const dentroDoMenu = menu.contains(e.target);
+  const nosBotoes = e.target.classList && (e.target.classList.contains('fa-plus') || e.target.classList.contains('fa-paperclip'));
+  if (!dentroDoMenu && !nosBotoes) fecharAttachMenu();
+});
+
+function selecionarGaleria() {
+  fecharAttachMenu();
+  document.getElementById('input-galeria').click();
+}
+
+function selecionarCamara() {
+  fecharAttachMenu();
+  document.getElementById('input-camara').click();
+}
+
+function selecionarDocumento() {
+  fecharAttachMenu();
+  document.getElementById('input-documento').click();
+}
+
+['input-galeria', 'input-camara'].forEach((id) => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', (e) => tratarFicheiroSelecionado(e, 'imagem'));
+});
+{
+  const elDoc = document.getElementById('input-documento');
+  if (elDoc) elDoc.addEventListener('change', (e) => tratarFicheiroSelecionado(e, 'documento'));
+}
+
+function tratarFicheiroSelecionado(event, tipo) {
+  const file = event.target.files[0];
+  event.target.value = ''; // permite selecionar o mesmo ficheiro outra vez de seguida
+  if (!file || !currentChatId) return;
+  enviarFicheiroParaChat(file, tipo);
+}
+
+// Faz upload para o Cloudinary e regista a mensagem no Firestore
+function enviarFicheiroParaChat(file, tipo) {
+  const myEmail = getCurrentUserEmail();
+
+  const container = document.getElementById('messages-container');
+  const aviso = document.createElement('div');
+  aviso.style.cssText = 'align-self:flex-end; color:#667781; font-size:12px; padding:4px;';
+  aviso.innerText = 'A enviar ' + file.name + '...';
+  container.appendChild(aviso);
+  container.scrollTop = container.scrollHeight;
+
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+  fetch('https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/auto/upload', {
+    method: 'POST',
+    body: formData
+  })
+    .then((res) => res.json())
+    .then((data) => {
+      if (!data.secure_url) {
+        throw new Error((data.error && data.error.message) || 'Falha no upload');
+      }
+      return db.collection('chats').doc(currentChatId).collection('messages').add({
+        type: tipo,
+        url: data.secure_url,
+        nomeFicheiro: file.name,
+        sender: myEmail,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    })
+    .catch((err) => {
+      console.error('Erro ao enviar ficheiro:', err);
+      alert('Não foi possível enviar o ficheiro. Verifica a ligação e tenta novamente.');
+    })
+    .finally(() => {
+      aviso.remove();
+    });
+}
+
+// Importar contacto do telefone (Contact Picker API — só Chrome Android)
+function selecionarContacto() {
+  fecharAttachMenu();
+
+  if (!('contacts' in navigator) || !('ContactsManager' in window)) {
+    alert('O teu navegador não suporta importar contactos diretamente. Esta função só funciona no Chrome para Android.');
+    return;
+  }
+
+  navigator.contacts.select(['name', 'tel'], { multiple: false })
+    .then((contactos) => {
+      if (!contactos || !contactos.length) return;
+      const c = contactos[0];
+      const nome = (c.name && c.name[0]) || 'Contacto';
+      const telefone = (c.tel && c.tel[0]) || '';
+      enviarContactoParaChat(nome, telefone);
+    })
+    .catch((err) => {
+      console.error('Erro ao importar contacto:', err);
+    });
+}
+
+function enviarContactoParaChat(nome, telefone) {
+  const myEmail = getCurrentUserEmail();
+  if (!currentChatId) return;
+
+  db.collection('chats').doc(currentChatId).collection('messages').add({
+    type: 'contacto',
+    nomeContacto: nome,
+    telefoneContacto: telefone,
+    sender: myEmail,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  }).catch((err) => {
+    console.error('Erro ao enviar contacto:', err);
+    alert('Não foi possível enviar o contacto.');
+  });
+}
 
 // Service Worker PWA
 if ('serviceWorker' in navigator) {
