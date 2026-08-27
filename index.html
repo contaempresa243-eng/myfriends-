@@ -74,7 +74,7 @@
 
     <!-- Ecrã de Conversa Detalhada -->
     <div id="chat-room-screen" class="screen" style="display:none; flex-direction:column; height:100%; background:var(--whatsapp-chat-bg); position:relative;">
-      <header style="background:var(--whatsapp-panel);">
+      <header id="chat-header" style="background:var(--whatsapp-panel);">
         <div style="display:flex; align-items:center; flex:1; min-width:0;">
           <span class="fa-solid fa-arrow-left" onclick="closeChat()" style="margin-right:15px; cursor:pointer; color:#aebac1; flex-shrink:0;"></span>
           <div class="avatar" id="active-chat-avatar" style="width:35px; height:35px; font-size:14px; margin-right:10px; flex-shrink:0;">MF</div>
@@ -125,6 +125,23 @@
       <input type="file" id="input-galeria" accept="image/*" style="display:none">
       <input type="file" id="input-camara" accept="image/*" capture="environment" style="display:none">
       <input type="file" id="input-documento" style="display:none">
+
+      <!-- Modal: Apagar mensagem(ns) -->
+      <div id="delete-modal" class="hidden" style="position:absolute; bottom:0; left:0; right:0; background:var(--whatsapp-panel); border-radius:16px 16px 0 0; box-shadow:0 -4px 15px rgba(0,0,0,0.4); padding:10px 16px 22px; z-index:210;">
+        <div style="width:36px; height:4px; background:#3b4a54; border-radius:2px; margin:0 auto 14px;"></div>
+        <div onclick="apagarParaMim()" style="padding:14px 4px; color:#e9edef; font-size:15px; cursor:pointer;">Apagar para mim</div>
+        <div id="opcao-apagar-todos" onclick="apagarParaTodos()" style="padding:14px 4px; color:#f15c6d; font-size:15px; cursor:pointer;">Apagar para todos</div>
+        <div onclick="fecharModalApagar()" style="padding:14px 4px; color:#8696a0; font-size:15px; cursor:pointer; border-top:1px solid #2a3942; margin-top:4px;">Cancelar</div>
+      </div>
+
+      <!-- Barra de resposta (oculta até responder a uma mensagem) -->
+      <div id="reply-bar" class="hidden" style="flex-shrink:0; background:#1f2c34; padding:8px 14px; display:flex; align-items:center; gap:10px; border-left:3px solid var(--whatsapp-teal);">
+        <div style="flex:1; min-width:0;">
+          <div id="reply-bar-remetente" style="color:#00a884; font-size:12px; font-weight:bold;"></div>
+          <div id="reply-bar-preview" style="color:#aebac1; font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></div>
+        </div>
+        <span class="fa-solid fa-xmark" onclick="cancelarResposta()" style="color:#8696a0; cursor:pointer; font-size:16px;"></span>
+      </div>
 
       <div style="flex-shrink:0; padding:8px 10px; background:var(--whatsapp-panel); display:flex; align-items:center; gap:8px;">
         <div id="message-pill" style="flex:1; display:flex; align-items:center; background:rgba(42,57,66,0.55); backdrop-filter:blur(4px); border-radius:22px; padding:2px 14px;">
