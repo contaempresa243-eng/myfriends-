@@ -173,12 +173,18 @@ function toggleMenu() {
 }
 
 // Abrir Chat Individual / Grupo
+let chatNameAtual = '';
+let chatAvatarAtual = '';
+
 function openChat(chatId, chatName) {
   currentChatId = chatId;
+  chatNameAtual = chatName;
+  chatAvatarAtual = chatName.substring(0, 2).toUpperCase();
+
   document.getElementById('main-screen').style.display = 'none';
   document.getElementById('chat-room-screen').style.display = 'flex';
-  document.getElementById('active-chat-name').innerText = chatName;
-  document.getElementById('active-chat-avatar').innerText = chatName.substring(0, 2).toUpperCase();
+  mensagensSelecionadas.clear();
+  renderHeaderNormal();
 
   atualizarBotaoMicOuEnviar();
   loadMessages();
@@ -187,6 +193,37 @@ function openChat(chatId, chatName) {
 function closeChat() {
   document.getElementById('chat-room-screen').style.display = 'none';
   document.getElementById('main-screen').style.display = 'flex';
+  mensagensSelecionadas.clear();
+  cancelarResposta();
+}
+
+// Alterna o cabeçalho do chat entre o modo normal e o modo de seleção de mensagens
+function renderHeaderNormal() {
+  document.getElementById('chat-header').innerHTML =
+    '<div style="display:flex; align-items:center; flex:1; min-width:0;">' +
+      '<span class="fa-solid fa-arrow-left" onclick="closeChat()" style="margin-right:15px; cursor:pointer; color:#aebac1; flex-shrink:0;"></span>' +
+      '<div class="avatar" style="width:35px; height:35px; font-size:14px; margin-right:10px; flex-shrink:0;">' + chatAvatarAtual + '</div>' +
+      '<h3 style="font-size:16px; color:#e9edef; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + chatNameAtual + '</h3>' +
+    '</div>' +
+    '<div class="header-icons" style="display:flex; align-items:center; flex-shrink:0;">' +
+      '<span class="fa-solid fa-video" onclick="startVideoCall()" style="margin-right:15px;"></span>' +
+      '<span class="fa-solid fa-phone" onclick="startVoiceCall()"></span>' +
+    '</div>';
+}
+
+function renderHeaderSelecao() {
+  const n = mensagensSelecionadas.size;
+  document.getElementById('chat-header').innerHTML =
+    '<div style="display:flex; align-items:center; flex:1; min-width:0;">' +
+      '<span class="fa-solid fa-xmark" onclick="cancelarSelecao()" style="margin-right:18px; cursor:pointer; color:#e9edef; font-size:18px;"></span>' +
+      '<span style="color:#e9edef; font-size:16px;">' + n + '</span>' +
+    '</div>' +
+    '<div style="display:flex; align-items:center; gap:22px;">' +
+      (n === 1 ? '<span class="fa-solid fa-reply" onclick="responderSelecionada()" style="color:#aebac1; font-size:17px; cursor:pointer;"></span>' : '') +
+      '<span class="fa-solid fa-copy" onclick="copiarSelecionadas()" style="color:#aebac1; font-size:17px; cursor:pointer;"></span>' +
+      '<span class="fa-solid fa-trash" onclick="abrirModalApagar()" style="color:#aebac1; font-size:17px; cursor:pointer;"></span>' +
+      '<span class="fa-solid fa-share" onclick="encaminharSelecionadas()" style="color:#aebac1; font-size:17px; cursor:pointer;"></span>' +
+    '</div>';
 }
 
 // Constrói o conteúdo interno de um balão consoante o tipo de mensagem
@@ -195,7 +232,10 @@ function construirConteudoMensagem(msg) {
     const img = document.createElement('img');
     img.src = msg.url;
     img.style.cssText = 'max-width:100%; border-radius:8px; display:block; cursor:pointer;';
-    img.onclick = () => window.open(msg.url, '_blank');
+    img.onclick = () => {
+      if (mensagensSelecionadas.size > 0) return;
+      window.open(msg.url, '_blank');
+    };
     return img;
   }
 
@@ -231,6 +271,19 @@ function construirConteudoMensagem(msg) {
   return span;
 }
 
+// Prévia curta de uma mensagem (usada em respostas e reencaminhamento)
+function previaMensagem(msg) {
+  if (msg.type === 'imagem') return '📷 Imagem';
+  if (msg.type === 'audio') return '🎤 Áudio';
+  if (msg.type === 'documento') return '📄 ' + (msg.nomeFicheiro || 'Documento');
+  if (msg.type === 'contacto') return '👤 ' + (msg.nomeContacto || 'Contacto');
+  return msg.text || '';
+}
+
+// Estado de seleção de mensagens (para responder/copiar/apagar/encaminhar)
+const mensagensSelecionadas = new Map(); // id -> { ref, msg, isMe }
+let respostaAtual = null; // { sender, preview }
+
 // Firestore: Carregar Mensagens em Tempo Real
 function loadMessages() {
   const container = document.getElementById('messages-container');
@@ -240,13 +293,22 @@ function loadMessages() {
     .orderBy('timestamp', 'asc')
     .onSnapshot((snapshot) => {
       container.innerHTML = '';
+      const idsVisiveis = new Set();
+
       snapshot.forEach((doc) => {
         const msg = doc.data();
+        if (msg.apagadoPara && msg.apagadoPara.includes(myEmail)) return; // apagada só para mim
+
+        const id = doc.id;
+        idsVisiveis.add(id);
         const isMe = msg.sender === myEmail;
+
+        const linha = document.createElement('div');
+        linha.dataset.msgId = id;
+        linha.style.cssText = 'display:flex; width:100%; padding:2px 0; ' + (isMe ? 'justify-content:flex-end;' : 'justify-content:flex-start;');
 
         const bubble = document.createElement('div');
         bubble.style.cssText = `
-          align-self: ${isMe ? 'flex-end' : 'flex-start'};
           background: ${isMe ? 'var(--whatsapp-outgoing)' : 'var(--whatsapp-incoming)'};
           color: #111;
           padding: ${(msg.type === 'imagem' || msg.type === 'audio') ? '4px' : '8px 12px'};
@@ -255,13 +317,192 @@ function loadMessages() {
           font-size: 14px;
           word-break: break-word;
         `;
+
+        if (msg.encaminhada) {
+          const enc = document.createElement('div');
+          enc.style.cssText = 'font-size:11px; color:#667781; font-style:italic; margin-bottom:2px;';
+          enc.innerText = '↪ Encaminhada';
+          bubble.appendChild(enc);
+        }
+
+        if (msg.replyTo) {
+          const quote = document.createElement('div');
+          quote.style.cssText = 'border-left:3px solid var(--whatsapp-teal); padding:4px 8px; margin-bottom:4px; background:rgba(0,0,0,0.06); border-radius:4px; font-size:12px; color:#3b4a54;';
+          quote.innerHTML = '<div style="font-weight:bold; color:#00a884;">' + (msg.replyTo.sender === myEmail ? 'Tu' : msg.replyTo.sender) + '</div><div>' + msg.replyTo.preview + '</div>';
+          bubble.appendChild(quote);
+        }
+
         bubble.appendChild(construirConteudoMensagem(msg));
-        container.appendChild(bubble);
+        linha.appendChild(bubble);
+        container.appendChild(linha);
+
+        anexarSelecaoNaLinha(linha, id, doc.ref, msg, isMe);
+
+        if (mensagensSelecionadas.has(id)) {
+          linha.style.background = 'rgba(0,168,132,0.15)';
+        }
       });
+
+      // Remove da seleção mensagens que já não existem (foram apagadas para todos)
+      let mudou = false;
+      mensagensSelecionadas.forEach((v, id) => {
+        if (!idsVisiveis.has(id)) {
+          mensagensSelecionadas.delete(id);
+          mudou = true;
+        }
+      });
+      if (mudou) {
+        if (mensagensSelecionadas.size > 0) renderHeaderSelecao();
+        else renderHeaderNormal();
+      }
+
       container.scrollTop = container.scrollHeight;
     }, (error) => {
       console.error('Erro ao carregar mensagens:', error);
       container.innerHTML = '<p style="text-align:center;color:#8696a0;font-size:13px;">Não foi possível carregar as mensagens. Verifica as regras de segurança do Firestore.</p>';
+    });
+}
+
+// Pressão longa (ou clique, já em modo seleção) para selecionar uma mensagem
+let temporizadorPressao = null;
+let pressaoLongaAcionada = false;
+
+function anexarSelecaoNaLinha(linha, id, ref, msg, isMe) {
+  const iniciar = () => {
+    pressaoLongaAcionada = false;
+    temporizadorPressao = setTimeout(() => {
+      pressaoLongaAcionada = true;
+      alternarSelecaoMensagem(linha, id, ref, msg, isMe);
+    }, 450);
+  };
+  const cancelar = () => clearTimeout(temporizadorPressao);
+
+  linha.addEventListener('touchstart', iniciar, { passive: true });
+  linha.addEventListener('touchend', cancelar);
+  linha.addEventListener('touchmove', cancelar);
+  linha.addEventListener('mousedown', iniciar);
+  linha.addEventListener('mouseup', cancelar);
+  linha.addEventListener('mouseleave', cancelar);
+
+  linha.addEventListener('click', () => {
+    if (pressaoLongaAcionada) { pressaoLongaAcionada = false; return; }
+    if (mensagensSelecionadas.size > 0) {
+      alternarSelecaoMensagem(linha, id, ref, msg, isMe);
+    }
+  });
+}
+
+function alternarSelecaoMensagem(linha, id, ref, msg, isMe) {
+  if (mensagensSelecionadas.has(id)) {
+    mensagensSelecionadas.delete(id);
+    linha.style.background = 'transparent';
+  } else {
+    mensagensSelecionadas.set(id, { ref, msg, isMe });
+    linha.style.background = 'rgba(0,168,132,0.15)';
+  }
+
+  if (mensagensSelecionadas.size > 0) {
+    renderHeaderSelecao();
+  } else {
+    renderHeaderNormal();
+  }
+}
+
+function cancelarSelecao() {
+  mensagensSelecionadas.forEach((v, id) => {
+    const el = document.querySelector('#messages-container [data-msg-id="' + id + '"]');
+    if (el) el.style.background = 'transparent';
+  });
+  mensagensSelecionadas.clear();
+  renderHeaderNormal();
+}
+
+// Copiar mensagens selecionadas
+function copiarSelecionadas() {
+  const textos = Array.from(mensagensSelecionadas.values()).map((v) => previaMensagem(v.msg)).join('\n');
+  navigator.clipboard.writeText(textos)
+    .then(() => cancelarSelecao())
+    .catch((err) => {
+      console.error('Erro ao copiar:', err);
+      alert('Não foi possível copiar.');
+    });
+}
+
+// Apagar mensagens selecionadas
+function abrirModalApagar() {
+  const todasMinhas = Array.from(mensagensSelecionadas.values()).every((v) => v.isMe);
+  document.getElementById('opcao-apagar-todos').classList.toggle('hidden', !todasMinhas);
+  document.getElementById('delete-modal').classList.remove('hidden');
+}
+
+function fecharModalApagar() {
+  document.getElementById('delete-modal').classList.add('hidden');
+}
+
+function apagarParaMim() {
+  const email = getCurrentUserEmail();
+  const promessas = Array.from(mensagensSelecionadas.values()).map((v) =>
+    v.ref.update({ apagadoPara: firebase.firestore.FieldValue.arrayUnion(email) })
+      .catch((err) => console.error('Erro ao apagar para mim:', err))
+  );
+  Promise.all(promessas).finally(() => {
+    fecharModalApagar();
+    cancelarSelecao();
+  });
+}
+
+function apagarParaTodos() {
+  const promessas = Array.from(mensagensSelecionadas.values()).map((v) =>
+    v.ref.delete().catch((err) => console.error('Erro ao apagar para todos:', err))
+  );
+  Promise.all(promessas).finally(() => {
+    fecharModalApagar();
+    cancelarSelecao();
+  });
+}
+
+// Responder à mensagem selecionada (só disponível com exatamente 1 selecionada)
+function responderSelecionada() {
+  const entrada = Array.from(mensagensSelecionadas.entries())[0];
+  if (!entrada) return;
+  const [, v] = entrada;
+
+  respostaAtual = { sender: v.msg.sender, preview: previaMensagem(v.msg) };
+  const myEmail = getCurrentUserEmail();
+  document.getElementById('reply-bar-remetente').innerText = respostaAtual.sender === myEmail ? 'Tu' : respostaAtual.sender;
+  document.getElementById('reply-bar-preview').innerText = respostaAtual.preview;
+  document.getElementById('reply-bar').classList.remove('hidden');
+
+  cancelarSelecao();
+  const input = document.getElementById('message-input');
+  if (input) input.focus();
+}
+
+function cancelarResposta() {
+  respostaAtual = null;
+  const barra = document.getElementById('reply-bar');
+  if (barra) barra.classList.add('hidden');
+}
+
+// Reencaminhar mensagens selecionadas (reenvia para este chat, já que ainda só existe um)
+function encaminharSelecionadas() {
+  const myEmail = getCurrentUserEmail();
+  const promessas = Array.from(mensagensSelecionadas.values()).map((v) => {
+    const nova = Object.assign({}, v.msg, {
+      sender: myEmail,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+      encaminhada: true
+    });
+    delete nova.replyTo;
+    delete nova.apagadoPara;
+    return db.collection('chats').doc(currentChatId).collection('messages').add(nova);
+  });
+
+  Promise.all(promessas)
+    .then(() => cancelarSelecao())
+    .catch((err) => {
+      console.error('Erro ao encaminhar:', err);
+      alert('Não foi possível encaminhar a mensagem.');
     });
 }
 
@@ -272,13 +513,19 @@ function sendFirebaseMessage() {
   const myEmail = getCurrentUserEmail();
   if (!text || !currentChatId) return;
 
-  db.collection('chats').doc(currentChatId).collection('messages').add({
+  const dadosMensagem = {
     text: text,
     sender: myEmail,
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  }).then(() => {
+  };
+  if (respostaAtual) {
+    dadosMensagem.replyTo = { sender: respostaAtual.sender, preview: respostaAtual.preview };
+  }
+
+  db.collection('chats').doc(currentChatId).collection('messages').add(dadosMensagem).then(() => {
     input.value = '';
     atualizarBotaoMicOuEnviar();
+    cancelarResposta();
   }).catch(err => {
     console.error('Erro ao enviar mensagem:', err);
     alert('Não foi possível enviar a mensagem. Verifica as regras de segurança do Firestore.');
