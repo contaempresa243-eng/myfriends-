@@ -180,6 +180,7 @@ function openChat(chatId, chatName) {
   document.getElementById('active-chat-name').innerText = chatName;
   document.getElementById('active-chat-avatar').innerText = chatName.substring(0, 2).toUpperCase();
 
+  atualizarBotaoMicOuEnviar();
   loadMessages();
 }
 
@@ -217,6 +218,14 @@ function construirConteudoMensagem(msg) {
     return card;
   }
 
+  if (msg.type === 'audio') {
+    const audio = document.createElement('audio');
+    audio.src = msg.url;
+    audio.controls = true;
+    audio.style.cssText = 'max-width:220px; height:36px;';
+    return audio;
+  }
+
   const span = document.createElement('span');
   span.innerText = msg.text || '';
   return span;
@@ -240,7 +249,7 @@ function loadMessages() {
           align-self: ${isMe ? 'flex-end' : 'flex-start'};
           background: ${isMe ? 'var(--whatsapp-outgoing)' : 'var(--whatsapp-incoming)'};
           color: #111;
-          padding: ${msg.type === 'imagem' ? '4px' : '8px 12px'};
+          padding: ${(msg.type === 'imagem' || msg.type === 'audio') ? '4px' : '8px 12px'};
           border-radius: 7px;
           max-width: 70%;
           font-size: 14px;
@@ -269,13 +278,30 @@ function sendFirebaseMessage() {
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
   }).then(() => {
     input.value = '';
+    atualizarBotaoMicOuEnviar();
   }).catch(err => {
     console.error('Erro ao enviar mensagem:', err);
     alert('Não foi possível enviar a mensagem. Verifica as regras de segurança do Firestore.');
   });
 }
 
-// Enviar com a tecla Enter
+// Alterna entre o botão de microfone e o botão de enviar consoante haja texto escrito
+function atualizarBotaoMicOuEnviar() {
+  const input = document.getElementById('message-input');
+  const btnMic = document.getElementById('btn-mic');
+  const btnSend = document.getElementById('btn-send');
+  if (!input || !btnMic || !btnSend) return;
+
+  if (input.value.trim().length > 0) {
+    btnMic.classList.add('hidden');
+    btnSend.classList.remove('hidden');
+  } else {
+    btnMic.classList.remove('hidden');
+    btnSend.classList.add('hidden');
+  }
+}
+
+// Enviar com a tecla Enter + alternar botão mic/enviar ao escrever
 document.addEventListener('DOMContentLoaded', () => {
   const messageInput = document.getElementById('message-input');
   if (messageInput) {
@@ -285,6 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
         sendFirebaseMessage();
       }
     });
+    messageInput.addEventListener('input', atualizarBotaoMicOuEnviar);
   }
 });
 
@@ -424,4 +451,86 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(err => console.log('Erro SW:', err));
   });
+}
+
+// Gravação de áudio (mensagem de voz)
+let gravadorAtual = null;
+let audioChunksAtual = [];
+let cronometroGravacao = null;
+let segundosGravacao = 0;
+let gravacaoCancelada = false;
+
+function mostrarBarraGravacao() {
+  document.getElementById('message-pill').classList.add('hidden');
+  document.getElementById('btn-mic').classList.add('hidden');
+  document.getElementById('btn-send').classList.add('hidden');
+  document.getElementById('recording-bar').classList.remove('hidden');
+}
+
+function esconderBarraGravacao() {
+  document.getElementById('recording-bar').classList.add('hidden');
+  document.getElementById('message-pill').classList.remove('hidden');
+  document.getElementById('recording-timer').innerText = '00:00';
+  atualizarBotaoMicOuEnviar();
+}
+
+function atualizarCronometroGravacao() {
+  segundosGravacao++;
+  const m = String(Math.floor(segundosGravacao / 60)).padStart(2, '0');
+  const s = String(segundosGravacao % 60).padStart(2, '0');
+  const el = document.getElementById('recording-timer');
+  if (el) el.innerText = m + ':' + s;
+}
+
+function iniciarGravacao() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    alert('O teu navegador não suporta gravação de áudio.');
+    return;
+  }
+
+  navigator.mediaDevices.getUserMedia({ audio: true })
+    .then((stream) => {
+      audioChunksAtual = [];
+      gravacaoCancelada = false;
+      gravadorAtual = new MediaRecorder(stream);
+
+      gravadorAtual.addEventListener('dataavailable', (e) => {
+        if (e.data.size > 0) audioChunksAtual.push(e.data);
+      });
+
+      gravadorAtual.addEventListener('stop', () => {
+        stream.getTracks().forEach((t) => t.stop());
+        clearInterval(cronometroGravacao);
+
+        if (!gravacaoCancelada && audioChunksAtual.length) {
+          const blob = new Blob(audioChunksAtual, { type: 'audio/webm' });
+          const file = new File([blob], 'audio_' + Date.now() + '.webm', { type: 'audio/webm' });
+          enviarFicheiroParaChat(file, 'audio');
+        }
+        esconderBarraGravacao();
+      });
+
+      gravadorAtual.start();
+      segundosGravacao = 0;
+      mostrarBarraGravacao();
+      cronometroGravacao = setInterval(atualizarCronometroGravacao, 1000);
+    })
+    .catch((err) => {
+      console.error('Erro ao aceder ao microfone:', err);
+      alert('Não foi possível aceder ao microfone. Verifica as permissões do navegador.');
+    });
+}
+
+function pararGravacaoEEnviar() {
+  if (gravadorAtual && gravadorAtual.state !== 'inactive') {
+    gravacaoCancelada = false;
+    gravadorAtual.stop();
+  }
+}
+
+function cancelarGravacao() {
+  if (gravadorAtual && gravadorAtual.state !== 'inactive') {
+    gravacaoCancelada = true;
+    gravadorAtual.stop();
+  }
 }
