@@ -717,7 +717,8 @@ function fecharChatMenu() {
   if (el) el.classList.add('hidden');
 }
 
-function toggleChatMenuMais() {
+function toggleChatMenuMais(event) {
+  if (event) event.stopPropagation();
   document.getElementById('chat-menu').classList.add('hidden');
   document.getElementById('chat-menu-mais').classList.remove('hidden');
 }
@@ -821,6 +822,9 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ---- Ficheiros, ligações e documentos ----
+let itensMediaAtual = [];
+let vistaMediaAtual = 'grade'; // 'grade' ou 'lista'
+
 function abrirFicheirosLigacoes() {
   fecharChatMenu();
   const modal = document.getElementById('media-modal');
@@ -832,33 +836,75 @@ function abrirFicheirosLigacoes() {
     .orderBy('timestamp', 'desc')
     .get()
     .then((snapshot) => {
-      lista.innerHTML = '';
-      let encontrouAlgum = false;
-
+      itensMediaAtual = [];
       snapshot.forEach((doc) => {
         const msg = doc.data();
         if (msg.type !== 'imagem' && msg.type !== 'documento') return;
-        encontrouAlgum = true;
-
-        const item = document.createElement('a');
-        item.href = msg.url;
-        item.target = '_blank';
-        item.style.cssText = 'display:flex; align-items:center; gap:10px; padding:12px 16px; color:#e9edef; text-decoration:none; border-bottom:1px solid #182229;';
-        const iconClasse = msg.type === 'imagem' ? 'fa-image' : 'fa-file-lines';
-        const nome = msg.nomeFicheiro || (msg.type === 'imagem' ? 'Imagem' : 'Documento');
-        item.innerHTML = '<i class="fa-solid ' + iconClasse + '" style="font-size:18px; color:#8696a0; width:20px; text-align:center;"></i>' +
-          '<span style="font-size:14px; word-break:break-word;">' + nome + '</span>';
-        lista.appendChild(item);
+        itensMediaAtual.push({
+          type: msg.type,
+          url: msg.url,
+          nomeFicheiro: msg.nomeFicheiro || (msg.type === 'imagem' ? 'Imagem' : 'Documento')
+        });
       });
-
-      if (!encontrouAlgum) {
-        lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px; text-align:center;">Ainda não há ficheiros ou documentos nesta conversa.</p>';
-      }
+      renderizarMediaModal();
     })
     .catch((err) => {
       console.error('Erro ao carregar ficheiros:', err);
       lista.innerHTML = '<p style="color:#f15c6d; font-size:13px; padding:16px;">Não foi possível carregar os ficheiros.</p>';
     });
+}
+
+function alternarVistaMedia() {
+  vistaMediaAtual = vistaMediaAtual === 'grade' ? 'lista' : 'grade';
+  const btn = document.getElementById('btn-vista-media');
+  if (btn) btn.className = vistaMediaAtual === 'grade' ? 'fa-solid fa-list' : 'fa-solid fa-table-cells';
+  renderizarMediaModal();
+}
+
+function renderizarMediaModal() {
+  const lista = document.getElementById('media-modal-lista');
+
+  if (!itensMediaAtual.length) {
+    lista.style.cssText = 'flex:1; overflow-y:auto;';
+    lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px; text-align:center;">Ainda não há ficheiros ou documentos nesta conversa.</p>';
+    return;
+  }
+
+  if (vistaMediaAtual === 'grade') {
+    lista.style.cssText = 'flex:1; overflow-y:auto; display:grid; grid-template-columns:repeat(3, 1fr); gap:3px; padding:3px;';
+    lista.innerHTML = '';
+    itensMediaAtual.forEach((item) => {
+      const link = document.createElement('a');
+      link.href = item.url;
+      link.target = '_blank';
+      link.style.cssText = 'display:block; aspect-ratio:1; overflow:hidden; background:#182229; position:relative;';
+
+      if (item.type === 'imagem') {
+        link.innerHTML = '<img src="' + item.url + '" style="width:100%; height:100%; object-fit:cover; display:block;">';
+      } else {
+        link.innerHTML = '<div style="width:100%; height:100%; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; padding:6px; text-align:center;">' +
+          '<i class="fa-solid fa-file-lines" style="font-size:22px; color:#8696a0;"></i>' +
+          '<span style="font-size:10px; color:#aebac1; word-break:break-word; overflow:hidden; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical;">' + item.nomeFicheiro + '</span>' +
+          '</div>';
+      }
+      lista.appendChild(link);
+    });
+    return;
+  }
+
+  // Vista em lista
+  lista.style.cssText = 'flex:1; overflow-y:auto;';
+  lista.innerHTML = '';
+  itensMediaAtual.forEach((item) => {
+    const linha = document.createElement('a');
+    linha.href = item.url;
+    linha.target = '_blank';
+    linha.style.cssText = 'display:flex; align-items:center; gap:10px; padding:12px 16px; color:#e9edef; text-decoration:none; border-bottom:1px solid #182229;';
+    const iconClasse = item.type === 'imagem' ? 'fa-image' : 'fa-file-lines';
+    linha.innerHTML = '<i class="fa-solid ' + iconClasse + '" style="font-size:18px; color:#8696a0; width:20px; text-align:center;"></i>' +
+      '<span style="font-size:14px; word-break:break-word;">' + item.nomeFicheiro + '</span>';
+    lista.appendChild(linha);
+  });
 }
 
 function fecharMediaModal() {
