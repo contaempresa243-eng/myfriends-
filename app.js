@@ -195,6 +195,10 @@ function closeChat() {
   document.getElementById('main-screen').style.display = 'flex';
   mensagensSelecionadas.clear();
   cancelarResposta();
+  fecharChatMenu();
+  fecharChatMenuMais();
+  fecharPesquisaMensagens();
+  fecharMediaModal();
 }
 
 // Alterna o cabeçalho do chat entre o modo normal e o modo de seleção de mensagens
@@ -207,7 +211,8 @@ function renderHeaderNormal() {
     '</div>' +
     '<div class="header-icons" style="display:flex; align-items:center; flex-shrink:0;">' +
       '<span class="fa-solid fa-video" onclick="startVideoCall()" style="margin-right:15px;"></span>' +
-      '<span class="fa-solid fa-phone" onclick="startVoiceCall()"></span>' +
+      '<span class="fa-solid fa-phone" onclick="startVoiceCall()" style="margin-right:15px;"></span>' +
+      '<span class="fa-solid fa-ellipsis-vertical" onclick="toggleChatMenu()"></span>' +
     '</div>';
 }
 
@@ -698,6 +703,187 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('sw.js').catch(err => console.log('Erro SW:', err));
   });
+}
+
+// ---- Menu do cabeçalho (3 pontos) ----
+function toggleChatMenu() {
+  fecharChatMenuMais();
+  document.getElementById('chat-menu').classList.toggle('hidden');
+  atualizarTextoNotificacao();
+}
+
+function fecharChatMenu() {
+  const el = document.getElementById('chat-menu');
+  if (el) el.classList.add('hidden');
+}
+
+function toggleChatMenuMais() {
+  document.getElementById('chat-menu').classList.add('hidden');
+  document.getElementById('chat-menu-mais').classList.remove('hidden');
+}
+
+function fecharChatMenuMais() {
+  const el = document.getElementById('chat-menu-mais');
+  if (el) el.classList.add('hidden');
+}
+
+// Fecha os menus do cabeçalho ao tocar fora deles
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('chat-menu');
+  const menuMais = document.getElementById('chat-menu-mais');
+  const noBotao = e.target.classList && e.target.classList.contains('fa-ellipsis-vertical');
+
+  if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && !noBotao) {
+    fecharChatMenu();
+  }
+  if (menuMais && !menuMais.classList.contains('hidden') && !menuMais.contains(e.target) && !noBotao) {
+    fecharChatMenuMais();
+  }
+});
+
+// Pequeno aviso temporário (para funções ainda não implementadas)
+function mostrarToast(texto) {
+  const toast = document.createElement('div');
+  toast.innerText = texto;
+  toast.style.cssText = 'position:absolute; bottom:90px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:8px 16px; border-radius:20px; font-size:13px; z-index:300; box-shadow:0 2px 8px rgba(0,0,0,0.3); white-space:nowrap;';
+  const tela = document.getElementById('chat-room-screen');
+  tela.appendChild(toast);
+  setTimeout(() => toast.remove(), 1800);
+}
+
+function acaoMenuChat(tipo) {
+  fecharChatMenu();
+  fecharChatMenuMais();
+  const nomes = {
+    'novo-grupo': 'Novo grupo',
+    'ver-contato': 'Ver Contato',
+    'temporarias': 'Mensagens temporárias',
+    'tema': 'Tema da conversa',
+    'estrela': 'Marcar com estrelas',
+    'nao-lida': 'Marcar como não lida'
+  };
+  mostrarToast((nomes[tipo] || 'Função') + ' — em breve');
+}
+
+function denunciarConversa() {
+  fecharChatMenuMais();
+  mostrarToast('Denunciar — em breve');
+}
+
+function bloquearConversa() {
+  fecharChatMenuMais();
+  mostrarToast('Bloquear — em breve');
+}
+
+// ---- Desativar/ativar notificação (preferência local por conversa) ----
+function toggleNotificacao() {
+  const chave = 'myfriens_silenciar_' + currentChatId;
+  const silenciadoAgora = window.localStorage.getItem(chave) === '1';
+  window.localStorage.setItem(chave, silenciadoAgora ? '0' : '1');
+  fecharChatMenu();
+}
+
+function atualizarTextoNotificacao() {
+  const el = document.getElementById('item-notificacao');
+  if (!el || !currentChatId) return;
+  const silenciado = window.localStorage.getItem('myfriens_silenciar_' + currentChatId) === '1';
+  el.innerText = silenciado ? 'Ativar notificação' : 'Desativar notificação';
+}
+
+// ---- Pesquisar nesta conversa ----
+function abrirPesquisaMensagens() {
+  fecharChatMenu();
+  document.getElementById('search-bar').classList.remove('hidden');
+  const input = document.getElementById('search-input');
+  input.value = '';
+  input.focus();
+}
+
+function fecharPesquisaMensagens() {
+  const barra = document.getElementById('search-bar');
+  if (barra) barra.classList.add('hidden');
+  document.querySelectorAll('#messages-container [data-msg-id]').forEach((el) => {
+    el.style.display = 'flex';
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) {
+    searchInput.addEventListener('input', () => {
+      const termo = searchInput.value.trim().toLowerCase();
+      document.querySelectorAll('#messages-container [data-msg-id]').forEach((el) => {
+        const texto = el.innerText.toLowerCase();
+        el.style.display = (!termo || texto.includes(termo)) ? 'flex' : 'none';
+      });
+    });
+  }
+});
+
+// ---- Ficheiros, ligações e documentos ----
+function abrirFicheirosLigacoes() {
+  fecharChatMenu();
+  const modal = document.getElementById('media-modal');
+  const lista = document.getElementById('media-modal-lista');
+  lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:14px;">A carregar...</p>';
+  modal.classList.remove('hidden');
+
+  db.collection('chats').doc(currentChatId).collection('messages')
+    .orderBy('timestamp', 'desc')
+    .get()
+    .then((snapshot) => {
+      lista.innerHTML = '';
+      let encontrouAlgum = false;
+
+      snapshot.forEach((doc) => {
+        const msg = doc.data();
+        if (msg.type !== 'imagem' && msg.type !== 'documento') return;
+        encontrouAlgum = true;
+
+        const item = document.createElement('a');
+        item.href = msg.url;
+        item.target = '_blank';
+        item.style.cssText = 'display:flex; align-items:center; gap:10px; padding:12px 16px; color:#e9edef; text-decoration:none; border-bottom:1px solid #182229;';
+        const iconClasse = msg.type === 'imagem' ? 'fa-image' : 'fa-file-lines';
+        const nome = msg.nomeFicheiro || (msg.type === 'imagem' ? 'Imagem' : 'Documento');
+        item.innerHTML = '<i class="fa-solid ' + iconClasse + '" style="font-size:18px; color:#8696a0; width:20px; text-align:center;"></i>' +
+          '<span style="font-size:14px; word-break:break-word;">' + nome + '</span>';
+        lista.appendChild(item);
+      });
+
+      if (!encontrouAlgum) {
+        lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px; text-align:center;">Ainda não há ficheiros ou documentos nesta conversa.</p>';
+      }
+    })
+    .catch((err) => {
+      console.error('Erro ao carregar ficheiros:', err);
+      lista.innerHTML = '<p style="color:#f15c6d; font-size:13px; padding:16px;">Não foi possível carregar os ficheiros.</p>';
+    });
+}
+
+function fecharMediaModal() {
+  const modal = document.getElementById('media-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
+// ---- Limpar conversa (apaga todas as mensagens só para mim) ----
+function limparConversa() {
+  fecharChatMenuMais();
+  if (!window.confirm('Limpar todas as mensagens desta conversa? Isto só afeta o teu dispositivo.')) return;
+
+  const email = getCurrentUserEmail();
+  db.collection('chats').doc(currentChatId).collection('messages').get()
+    .then((snapshot) => {
+      const lote = db.batch();
+      snapshot.forEach((doc) => {
+        lote.update(doc.ref, { apagadoPara: firebase.firestore.FieldValue.arrayUnion(email) });
+      });
+      return lote.commit();
+    })
+    .catch((err) => {
+      console.error('Erro ao limpar conversa:', err);
+      alert('Não foi possível limpar a conversa.');
+    });
 }
 
 // Gravação de áudio (mensagem de voz)
