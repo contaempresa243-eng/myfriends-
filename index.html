@@ -102,7 +102,7 @@
         <div class="chat-menu-item" id="item-notificacao" onclick="toggleNotificacao()">Desativar notificação</div>
         <div class="chat-menu-item" onclick="acaoMenuChat('temporarias')">Mensagens temporárias</div>
         <div class="chat-menu-item" onclick="acaoMenuChat('tema')">Tema da conversa</div>
-        <div class="chat-menu-item" onclick="toggleChatMenuMais()" style="display:flex; justify-content:space-between; align-items:center;">
+        <div class="chat-menu-item" onclick="toggleChatMenuMais(event)" style="display:flex; justify-content:space-between; align-items:center;">
           Mais <span class="fa-solid fa-chevron-right" style="font-size:11px; color:#8696a0;"></span>
         </div>
       </div>
@@ -120,7 +120,8 @@
       <div id="media-modal" class="hidden" style="position:absolute; inset:0; background:var(--whatsapp-panel); z-index:260; display:flex; flex-direction:column;">
         <div style="display:flex; align-items:center; padding:14px; border-bottom:1px solid #2a3942; flex-shrink:0;">
           <span class="fa-solid fa-arrow-left" onclick="fecharMediaModal()" style="color:#aebac1; margin-right:16px; cursor:pointer;"></span>
-          <h3 style="color:#e9edef; font-size:16px;">Ficheiros, ligações e documentos</h3>
+          <h3 style="color:#e9edef; font-size:16px; flex:1;">Ficheiros, ligações e documentos</h3>
+          <span id="btn-vista-media" class="fa-solid fa-list" onclick="alternarVistaMedia()" style="color:#aebac1; font-size:17px; cursor:pointer;"></span>
         </div>
         <div id="media-modal-lista" style="flex:1; overflow-y:auto;"></div>
       </div>
