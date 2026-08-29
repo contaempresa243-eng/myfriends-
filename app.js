@@ -212,7 +212,7 @@ function escutarListaConversas() {
 
         const item = document.createElement('div');
         item.className = 'chat-item';
-        item.onclick = () => openChat(doc.id, nome);
+        item.onclick = () => openChat(doc.id, nome, outroEmail);
         item.innerHTML =
           '<div class="avatar" style="background:#4a90d9;">' + nome.substring(0, 2).toUpperCase() + '</div>' +
           '<div class="chat-info"><h4>' + nome + '</h4><p>' + outroEmail + '</p></div>';
@@ -354,7 +354,7 @@ function iniciarConversaCom(outroEmail) {
   }, { merge: true })
     .then(() => {
       fecharNovoContato();
-      openChat(chatId, outroEmail.split('@')[0]);
+      openChat(chatId, outroEmail.split('@')[0], outroEmail);
     })
     .catch((err) => {
       console.error('Erro ao iniciar conversa:', err);
@@ -431,10 +431,11 @@ function normalizarTelefone(numero) {
 let chatNameAtual = '';
 let chatAvatarAtual = '';
 
-function openChat(chatId, chatName) {
+function openChat(chatId, chatName, outroEmail) {
   currentChatId = chatId;
   chatNameAtual = chatName;
   chatAvatarAtual = chatName.substring(0, 2).toUpperCase();
+  chamadaOutroEmail = outroEmail || null;
 
   document.getElementById('main-screen').style.display = 'none';
   document.getElementById('chat-room-screen').style.display = 'flex';
@@ -443,6 +444,10 @@ function openChat(chatId, chatName) {
 
   atualizarBotaoMicOuEnviar();
   loadMessages();
+
+  if (chamadaOutroEmail) {
+    escutarChamadasRecebidas();
+  }
 }
 
 function closeChat() {
@@ -454,6 +459,9 @@ function closeChat() {
   fecharChatMenuMais();
   fecharPesquisaMensagens();
   fecharMediaModal();
+  pararEscutaChamadasRecebidas();
+  terminarChamadaLocal();
+  chamadaOutroEmail = null;
 }
 
 // Alterna o cabeçalho do chat entre o modo normal e o modo de seleção de mensagens
@@ -864,8 +872,290 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-function startVoiceCall() { alert('A iniciar chamada...'); }
-function startVideoCall() { alert('A iniciar videochamada...'); }
+// ================= CHAMADAS (voz e vídeo) =================
+// Só disponível em conversas 1-para-1 (chamadaOutroEmail é definido em openChat).
+// Sinalização via Firestore (chats/{chatId}/chamadas/ativa), WebRTC com STUN público
+// (sem servidor TURN próprio — chamadas podem falhar em redes muito restritivas).
+
+const configuracaoRTC = {
+  iceServers: [
+    { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] }
+  ]
+};
+
+let chamadaOutroEmail = null;
+let peerConnection = null;
+let localStream = null;
+let souChamador = false;
+let chamadaTipoAtual = 'audio';
+let unsubscribeChamada = null;
+let unsubscribeChamadaRecebida = null;
+let unsubscribeCandidatosRemoto = null;
+let cronometroChamada = null;
+let segundosChamada = 0;
+
+function startVoiceCall() { iniciarChamada('audio'); }
+function startVideoCall() { iniciarChamada('video'); }
+
+function iniciarChamada(tipo) {
+  if (!chamadaOutroEmail) {
+    mostrarToast('Chamadas só estão disponíveis em conversas individuais.');
+    return;
+  }
+  if (peerConnection) {
+    mostrarToast('Já tens uma chamada em curso.');
+    return;
+  }
+
+  chamadaTipoAtual = tipo;
+  souChamador = true;
+  const constraints = tipo === 'video' ? { audio: true, video: true } : { audio: true, video: false };
+
+  navigator.mediaDevices.getUserMedia(constraints)
+    .then((stream) => {
+      localStream = stream;
+      mostrarEcraChamada(tipo);
+      criarPeerConnection();
+      stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
+      return peerConnection.createOffer();
+    })
+    .then((offer) => peerConnection.setLocalDescription(offer).then(() => offer))
+    .then((offer) => db.collection('chats').doc(currentChatId).collection('chamadas').doc('ativa').set({
+      tipo: tipo,
+      chamador: getCurrentUserEmail(),
+      recetor: chamadaOutroEmail,
+      estado: 'a_chamar',
+      oferta: { type: offer.type, sdp: offer.sdp },
+      resposta: null,
+      iniciadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    }))
+    .then(() => {
+      escutarEstadoChamada();
+      escutarCandidatosRemotos('candidatosRecetor');
+    })
+    .catch((err) => {
+      console.error('Erro ao iniciar chamada:', err);
+      alert('Não foi possível iniciar a chamada. Verifica as permissões de câmara/microfone.');
+      terminarChamadaLocal();
+    });
+}
+
+function criarPeerConnection() {
+  peerConnection = new RTCPeerConnection(configuracaoRTC);
+
+  peerConnection.onicecandidate = (event) => {
+    if (!event.candidate) return;
+    const subcolecao = souChamador ? 'candidatosChamador' : 'candidatosRecetor';
+    db.collection('chats').doc(currentChatId).collection('chamadas').doc('ativa')
+      .collection(subcolecao).add(event.candidate.toJSON())
+      .catch((err) => console.error('Erro ao enviar candidato ICE:', err));
+  };
+
+  peerConnection.ontrack = (event) => {
+    const stream = event.streams[0];
+    if (chamadaTipoAtual === 'video') {
+      const remoteVideo = document.getElementById('call-remote-video');
+      if (remoteVideo) remoteVideo.srcObject = stream;
+    } else {
+      const remoteAudio = document.getElementById('call-remote-audio');
+      if (remoteAudio) remoteAudio.srcObject = stream;
+    }
+  };
+
+  peerConnection.onconnectionstatechange = () => {
+    if (peerConnection && (peerConnection.connectionState === 'disconnected' || peerConnection.connectionState === 'failed')) {
+      terminarChamada();
+    }
+  };
+}
+
+// Escuta chamadas a chegar (ligado enquanto o chat 1-para-1 está aberto)
+function escutarChamadasRecebidas() {
+  pararEscutaChamadasRecebidas();
+  const chatIdAoEscutar = currentChatId;
+
+  unsubscribeChamadaRecebida = db.collection('chats').doc(chatIdAoEscutar).collection('chamadas').doc('ativa')
+    .onSnapshot((doc) => {
+      if (!doc.exists) return;
+      const chamada = doc.data();
+      const myEmail = getCurrentUserEmail();
+
+      if (chamada.estado === 'a_chamar' && chamada.recetor === myEmail && !peerConnection) {
+        souChamador = false;
+        chamadaTipoAtual = chamada.tipo;
+        mostrarEcraChamadaRecebida(chamada);
+      }
+    });
+}
+
+function pararEscutaChamadasRecebidas() {
+  if (unsubscribeChamadaRecebida) { unsubscribeChamadaRecebida(); unsubscribeChamadaRecebida = null; }
+}
+
+function mostrarEcraChamadaRecebida(chamada) {
+  document.getElementById('call-screen').classList.remove('hidden');
+  document.getElementById('call-avatar').innerText = chamada.chamador.substring(0, 2).toUpperCase();
+  document.getElementById('call-nome').innerText = chamada.chamador.split('@')[0];
+  document.getElementById('call-status').innerText = chamada.tipo === 'video' ? 'Videochamada recebida' : 'Chamada recebida';
+  document.getElementById('call-video-area').classList.add('hidden');
+  document.getElementById('call-botoes-normal').classList.add('hidden');
+  document.getElementById('call-botoes-receber').classList.remove('hidden');
+}
+
+function aceitarChamada() {
+  const constraints = chamadaTipoAtual === 'video' ? { audio: true, video: true } : { audio: true, video: false };
+  const chamadaRef = db.collection('chats').doc(currentChatId).collection('chamadas').doc('ativa');
+
+  navigator.mediaDevices.getUserMedia(constraints)
+    .then((stream) => {
+      localStream = stream;
+      criarPeerConnection();
+      stream.getTracks().forEach((track) => peerConnection.addTrack(track, stream));
+
+      if (chamadaTipoAtual === 'video') {
+        document.getElementById('call-video-area').classList.remove('hidden');
+        const localVideo = document.getElementById('call-local-video');
+        if (localVideo) localVideo.srcObject = stream;
+      }
+
+      return chamadaRef.get();
+    })
+    .then((doc) => {
+      const chamada = doc.data();
+      return peerConnection.setRemoteDescription(new RTCSessionDescription(chamada.oferta))
+        .then(() => peerConnection.createAnswer())
+        .then((answer) => peerConnection.setLocalDescription(answer).then(() => answer))
+        .then((answer) => chamadaRef.update({
+          estado: 'aceite',
+          resposta: { type: answer.type, sdp: answer.sdp }
+        }));
+    })
+    .then(() => {
+      document.getElementById('call-botoes-receber').classList.add('hidden');
+      document.getElementById('call-botoes-normal').classList.remove('hidden');
+      iniciarCronometroChamada();
+      escutarEstadoChamada();
+      escutarCandidatosRemotos('candidatosChamador');
+    })
+    .catch((err) => {
+      console.error('Erro ao aceitar chamada:', err);
+      alert('Não foi possível aceitar a chamada.');
+      terminarChamadaLocal();
+    });
+}
+
+function recusarChamada() {
+  db.collection('chats').doc(currentChatId).collection('chamadas').doc('ativa')
+    .update({ estado: 'recusada' }).catch(() => {});
+  terminarChamadaLocal();
+}
+
+function escutarEstadoChamada() {
+  pararEscutaEstadoChamada();
+  unsubscribeChamada = db.collection('chats').doc(currentChatId).collection('chamadas').doc('ativa')
+    .onSnapshot((doc) => {
+      if (!doc.exists) return;
+      const chamada = doc.data();
+
+      if (souChamador && chamada.estado === 'aceite' && chamada.resposta && peerConnection && !peerConnection.currentRemoteDescription) {
+        peerConnection.setRemoteDescription(new RTCSessionDescription(chamada.resposta))
+          .then(() => {
+            document.getElementById('call-status').innerText = 'Em chamada';
+            if (chamadaTipoAtual === 'video') {
+              document.getElementById('call-video-area').classList.remove('hidden');
+            }
+            iniciarCronometroChamada();
+          })
+          .catch((err) => console.error('Erro ao aplicar resposta:', err));
+      }
+
+      if (chamada.estado === 'recusada' || chamada.estado === 'terminada') {
+        terminarChamadaLocal();
+      }
+    });
+}
+
+function pararEscutaEstadoChamada() {
+  if (unsubscribeChamada) { unsubscribeChamada(); unsubscribeChamada = null; }
+}
+
+function escutarCandidatosRemotos(subcolecao) {
+  if (unsubscribeCandidatosRemoto) { unsubscribeCandidatosRemoto(); }
+  unsubscribeCandidatosRemoto = db.collection('chats').doc(currentChatId).collection('chamadas').doc('ativa')
+    .collection(subcolecao)
+    .onSnapshot((snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type === 'added' && peerConnection) {
+          peerConnection.addIceCandidate(new RTCIceCandidate(change.doc.data()))
+            .catch((err) => console.error('Erro ao adicionar candidato ICE:', err));
+        }
+      });
+    });
+}
+
+function mostrarEcraChamada(tipo) {
+  document.getElementById('call-screen').classList.remove('hidden');
+  document.getElementById('call-avatar').innerText = chamadaOutroEmail ? chamadaOutroEmail.substring(0, 2).toUpperCase() : '--';
+  document.getElementById('call-nome').innerText = chamadaOutroEmail ? chamadaOutroEmail.split('@')[0] : '';
+  document.getElementById('call-status').innerText = tipo === 'video' ? 'A vídeo chamar...' : 'A chamar...';
+  document.getElementById('call-botoes-normal').classList.remove('hidden');
+  document.getElementById('call-botoes-receber').classList.add('hidden');
+  document.getElementById('call-video-area').classList.add('hidden');
+
+  if (tipo === 'video' && localStream) {
+    const localVideo = document.getElementById('call-local-video');
+    if (localVideo) {
+      localVideo.srcObject = localStream;
+      document.getElementById('call-video-area').classList.remove('hidden');
+    }
+  }
+}
+
+function terminarChamada() {
+  db.collection('chats').doc(currentChatId).collection('chamadas').doc('ativa')
+    .update({ estado: 'terminada' }).catch(() => {});
+  terminarChamadaLocal();
+}
+
+function terminarChamadaLocal() {
+  clearInterval(cronometroChamada);
+  cronometroChamada = null;
+  segundosChamada = 0;
+
+  if (localStream) { localStream.getTracks().forEach((t) => t.stop()); localStream = null; }
+  if (peerConnection) { peerConnection.close(); peerConnection = null; }
+  pararEscutaEstadoChamada();
+  if (unsubscribeCandidatosRemoto) { unsubscribeCandidatosRemoto(); unsubscribeCandidatosRemoto = null; }
+
+  const tela = document.getElementById('call-screen');
+  if (tela) tela.classList.add('hidden');
+  const localVideo = document.getElementById('call-local-video');
+  const remoteVideo = document.getElementById('call-remote-video');
+  const remoteAudio = document.getElementById('call-remote-audio');
+  if (localVideo) localVideo.srcObject = null;
+  if (remoteVideo) remoteVideo.srcObject = null;
+  if (remoteAudio) remoteAudio.srcObject = null;
+}
+
+function iniciarCronometroChamada() {
+  segundosChamada = 0;
+  cronometroChamada = setInterval(() => {
+    segundosChamada++;
+    const m = String(Math.floor(segundosChamada / 60)).padStart(2, '0');
+    const s = String(segundosChamada % 60).padStart(2, '0');
+    const status = document.getElementById('call-status');
+    if (status) status.innerText = m + ':' + s;
+  }, 1000);
+}
+
+function alternarMudo() {
+  if (!localStream) return;
+  const audioTrack = localStream.getAudioTracks()[0];
+  if (!audioTrack) return;
+  audioTrack.enabled = !audioTrack.enabled;
+  const btn = document.getElementById('call-btn-mudo');
+  if (btn) btn.style.background = audioTrack.enabled ? 'rgba(255,255,255,0.15)' : '#f15c6d';
+}
 
 // Menu de Anexo (Galeria / Câmara / Contactos / Documentos)
 function toggleAttachMenu() {
