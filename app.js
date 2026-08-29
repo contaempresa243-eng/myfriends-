@@ -168,6 +168,7 @@ completarLoginPorLink();
 
 // Navegação por Abas
 let unsubscribeConversas = null;
+let unsubscribeComunidades = null;
 
 function switchTab(tabName, element) {
   document.querySelectorAll('.tab-item').forEach(tab => tab.classList.remove('active'));
@@ -175,25 +176,32 @@ function switchTab(tabName, element) {
 
   const contentArea = document.getElementById('tab-content');
   const fab = document.getElementById('fab-nova-conversa');
+  const fabComunidade = document.getElementById('fab-nova-comunidade');
 
-  // Sai da escuta em tempo real da lista de conversas ao trocar de separador
+  // Sai da escuta em tempo real da lista de conversas/comunidades ao trocar de separador
   if (unsubscribeConversas) {
     unsubscribeConversas();
     unsubscribeConversas = null;
   }
+  if (unsubscribeComunidades) {
+    unsubscribeComunidades();
+    unsubscribeComunidades = null;
+  }
+
+  fab.classList.add('hidden');
+  fabComunidade.classList.add('hidden');
 
   if (tabName === 'chats') {
     fab.classList.remove('hidden');
     contentArea.innerHTML = '<div id="lista-conversas"></div>';
     escutarListaConversas();
   } else if (tabName === 'updates') {
-    fab.classList.add('hidden');
     contentArea.innerHTML = `<div style="padding: 20px; color: #8696a0; font-size:14px;"><strong>Estados</strong><br><br>Partilha atualizações com os teus amigos.</div>`;
   } else if (tabName === 'communities') {
-    fab.classList.add('hidden');
-    contentArea.innerHTML = `<div style="padding: 20px; color: #8696a0; font-size:14px;">Comunidades unificadas do myFriens.</div>`;
+    fabComunidade.classList.remove('hidden');
+    contentArea.innerHTML = '<div id="lista-comunidades"></div>';
+    escutarListaComunidades();
   } else if (tabName === 'calls') {
-    fab.classList.add('hidden');
     contentArea.innerHTML = `<div style="padding: 20px; color: #8696a0; font-size:14px;">Histórico de chamadas recentes.</div>`;
   }
 }
@@ -246,6 +254,230 @@ function escutarListaConversas() {
         container.appendChild(item);
       });
     }, (err) => console.error('Erro ao carregar conversas:', err));
+}
+
+// ================= COMUNIDADES =================
+function escutarListaComunidades() {
+  const myEmail = getCurrentUserEmail();
+  if (!myEmail) return;
+
+  unsubscribeComunidades = db.collection('comunidades')
+    .where('membros', 'array-contains', myEmail)
+    .onSnapshot((snapshot) => {
+      const container = document.getElementById('lista-comunidades');
+      if (!container) return;
+      container.innerHTML = '';
+
+      if (snapshot.empty) {
+        container.innerHTML = '<p style="padding:24px; color:#8696a0; font-size:14px; text-align:center;">Ainda não fazes parte de nenhuma comunidade. Toca em + para criar uma.</p>';
+        return;
+      }
+
+      snapshot.forEach((doc) => {
+        const com = doc.data();
+        const item = document.createElement('div');
+        item.className = 'chat-item';
+        item.onclick = () => abrirComunidade(doc.id, com);
+        item.innerHTML =
+          '<div class="avatar" style="background:#a682e3;">' + (com.nome || 'C').substring(0, 2).toUpperCase() + '</div>' +
+          '<div class="chat-info"><h4>' + (com.nome || 'Comunidade') + '</h4><p>' + ((com.membros && com.membros.length) || 0) + ' membros</p></div>';
+        container.appendChild(item);
+      });
+    }, (err) => console.error('Erro ao carregar comunidades:', err));
+}
+
+function abrirCriarComunidade() {
+  document.getElementById('comunidade-nome').value = '';
+  document.getElementById('comunidade-descricao').value = '';
+  document.getElementById('criar-comunidade-status').innerText = '';
+  document.getElementById('criar-comunidade-modal').classList.remove('hidden');
+}
+
+function fecharCriarComunidade() {
+  document.getElementById('criar-comunidade-modal').classList.add('hidden');
+}
+
+function criarComunidade() {
+  const nome = document.getElementById('comunidade-nome').value.trim();
+  const descricao = document.getElementById('comunidade-descricao').value.trim();
+  const status = document.getElementById('criar-comunidade-status');
+  const myEmail = getCurrentUserEmail();
+
+  if (!nome) {
+    status.style.color = '#f15c6d';
+    status.innerText = 'Escreve um nome para a comunidade.';
+    return;
+  }
+
+  status.style.color = '#8696a0';
+  status.innerText = 'A criar...';
+
+  const comunidadeRef = db.collection('comunidades').doc();
+  comunidadeRef.set({
+    nome: nome,
+    descricao: descricao,
+    criadoPor: myEmail,
+    admins: [myEmail],
+    membros: [myEmail],
+    criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+  })
+    .then(() => db.collection('chats').doc(comunidadeRef.id + '_anuncios').set({
+      type: 'anuncio',
+      nome: 'Anúncios',
+      comunidadeId: comunidadeRef.id,
+      apenasAdminsEscrevem: true,
+      admins: [myEmail],
+      participantes: [myEmail]
+    }))
+    .then(() => {
+      fecharCriarComunidade();
+      abrirComunidade(comunidadeRef.id, { nome: nome, admins: [myEmail], membros: [myEmail] });
+    })
+    .catch((err) => {
+      console.error('Erro ao criar comunidade:', err);
+      status.style.color = '#f15c6d';
+      status.innerText = 'Não foi possível criar. Tenta novamente.';
+    });
+}
+
+let comunidadeAtualId = null;
+let comunidadeAtualDados = null;
+let unsubscribeGruposComunidade = null;
+
+function abrirComunidade(comunidadeId, dados) {
+  comunidadeAtualId = comunidadeId;
+  comunidadeAtualDados = dados;
+
+  document.getElementById('main-screen').style.display = 'none';
+  document.getElementById('community-screen').style.display = 'flex';
+  document.getElementById('community-nome').innerText = dados.nome || 'Comunidade';
+
+  escutarGruposComunidade();
+}
+
+function fecharComunidade() {
+  document.getElementById('community-screen').style.display = 'none';
+  document.getElementById('main-screen').style.display = 'flex';
+  if (unsubscribeGruposComunidade) { unsubscribeGruposComunidade(); unsubscribeGruposComunidade = null; }
+  fecharComunidadeMenu();
+  comunidadeAtualId = null;
+}
+
+function toggleComunidadeMenu() {
+  document.getElementById('comunidade-menu').classList.toggle('hidden');
+}
+
+function fecharComunidadeMenu() {
+  const el = document.getElementById('comunidade-menu');
+  if (el) el.classList.add('hidden');
+}
+
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('comunidade-menu');
+  if (menu && !menu.classList.contains('hidden') && !menu.contains(e.target) && !(e.target.classList && e.target.classList.contains('fa-ellipsis-vertical'))) {
+    fecharComunidadeMenu();
+  }
+});
+
+function escutarGruposComunidade() {
+  if (unsubscribeGruposComunidade) unsubscribeGruposComunidade();
+
+  unsubscribeGruposComunidade = db.collection('chats')
+    .where('comunidadeId', '==', comunidadeAtualId)
+    .onSnapshot((snapshot) => {
+      const container = document.getElementById('comunidade-lista-grupos');
+      if (!container) return;
+      container.innerHTML = '';
+
+      const docs = snapshot.docs.slice().sort((a, b) => {
+        if (a.data().type === 'anuncio') return -1;
+        if (b.data().type === 'anuncio') return 1;
+        return 0;
+      });
+
+      docs.forEach((doc) => {
+        const chat = doc.data();
+        const item = document.createElement('div');
+        item.className = 'chat-item';
+        const ehAnuncio = chat.type === 'anuncio';
+        item.onclick = () => openChat(doc.id, chat.nome, null, {
+          tipo: ehAnuncio ? 'anuncio' : 'grupo',
+          comunidadeId: comunidadeAtualId,
+          apenasAdmins: !!chat.apenasAdminsEscrevem,
+          admins: chat.admins || []
+        });
+        item.innerHTML =
+          '<div class="avatar" style="background:' + (ehAnuncio ? '#e17055' : 'var(--whatsapp-teal)') + ';">' +
+          (ehAnuncio ? '📢' : (chat.nome || 'G').substring(0, 2).toUpperCase()) + '</div>' +
+          '<div class="chat-info"><h4>' + (chat.nome || 'Grupo') + '</h4><p>' + (ehAnuncio ? 'Só administradores escrevem' : ((chat.participantes && chat.participantes.length) || 0) + ' membros') + '</p></div>';
+        container.appendChild(item);
+      });
+    }, (err) => console.error('Erro ao carregar grupos da comunidade:', err));
+}
+
+function abrirCriarGrupoComunidade() {
+  const nome = window.prompt('Nome do novo grupo:');
+  if (!nome || !nome.trim()) return;
+  const myEmail = getCurrentUserEmail();
+
+  db.collection('chats').add({
+    type: 'grupo',
+    nome: nome.trim(),
+    comunidadeId: comunidadeAtualId,
+    participantes: [myEmail]
+  }).catch((err) => {
+    console.error('Erro ao criar grupo:', err);
+    alert('Não foi possível criar o grupo.');
+  });
+}
+
+function abrirMembrosComunidade() {
+  fecharComunidadeMenu();
+  const modal = document.getElementById('membros-comunidade-modal');
+  const lista = document.getElementById('membros-comunidade-lista');
+  lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px;">A carregar...</p>';
+  modal.classList.remove('hidden');
+
+  db.collection('comunidades').doc(comunidadeAtualId).get().then((doc) => {
+    const dados = doc.data() || {};
+    const membros = dados.membros || [];
+    const admins = dados.admins || [];
+    document.getElementById('membros-comunidade-titulo').innerText = 'Membros (' + membros.length + ')';
+    lista.innerHTML = '';
+
+    membros.forEach((email) => {
+      const nome = email.split('@')[0];
+      const ehAdmin = admins.includes(email);
+      const item = document.createElement('div');
+      item.className = 'chat-item';
+      item.innerHTML =
+        '<div class="avatar" style="background:#4a90d9;">' + nome.substring(0, 2).toUpperCase() + '</div>' +
+        '<div class="chat-info"><h4>' + nome + (ehAdmin ? ' <span style="color:var(--whatsapp-teal); font-size:11px;">· admin</span>' : '') + '</h4><p>' + email + '</p></div>';
+      lista.appendChild(item);
+    });
+  }).catch((err) => {
+    console.error('Erro ao carregar membros da comunidade:', err);
+    lista.innerHTML = '<p style="color:#f15c6d; font-size:13px; padding:16px;">Não foi possível carregar.</p>';
+  });
+}
+
+function fecharMembrosComunidade() {
+  document.getElementById('membros-comunidade-modal').classList.add('hidden');
+}
+
+function sairDaComunidade() {
+  fecharComunidadeMenu();
+  if (!window.confirm('Sair desta comunidade? Também sais de todos os grupos dela.')) return;
+
+  const email = getCurrentUserEmail();
+  db.collection('comunidades').doc(comunidadeAtualId).update({
+    membros: firebase.firestore.FieldValue.arrayRemove(email),
+    admins: firebase.firestore.FieldValue.arrayRemove(email)
+  }).then(() => fecharComunidade())
+    .catch((err) => {
+      console.error('Erro ao sair da comunidade:', err);
+      alert('Não foi possível sair da comunidade.');
+    });
 }
 
 // ---- Nova conversa / lista de contactos ----
@@ -456,13 +688,22 @@ function normalizarTelefone(numero) {
 
 // Abrir Chat Individual / Grupo
 let chatNameAtual = '';
+let chatTipoAtual = 'grupo'; // 'grupo' | '1v1' | 'anuncio'
+let comunidadeIdAtual = null;
+let chatApenasAdminsAtual = false;
+let chatAdminsAtual = [];
 let chatAvatarAtual = '';
 
-function openChat(chatId, chatName, outroEmail) {
+function openChat(chatId, chatName, outroEmail, extra) {
   currentChatId = chatId;
   chatNameAtual = chatName;
   chatAvatarAtual = chatName.substring(0, 2).toUpperCase();
   chamadaOutroEmail = outroEmail || null;
+
+  chatTipoAtual = (extra && extra.tipo) || (outroEmail ? '1v1' : 'grupo');
+  comunidadeIdAtual = (extra && extra.comunidadeId) || null;
+  chatApenasAdminsAtual = !!(extra && extra.apenasAdmins);
+  chatAdminsAtual = (extra && extra.admins) || [];
 
   document.getElementById('main-screen').style.display = 'none';
   document.getElementById('chat-room-screen').style.display = 'flex';
@@ -855,6 +1096,11 @@ function sendFirebaseMessage() {
   const text = input.value.trim();
   const myEmail = getCurrentUserEmail();
   if (!text || !currentChatId) return;
+
+  if (chatApenasAdminsAtual && !chatAdminsAtual.includes(myEmail)) {
+    mostrarToast('Só administradores podem enviar mensagens neste grupo de anúncios.');
+    return;
+  }
 
   const dadosMensagem = {
     text: text,
@@ -1335,16 +1581,18 @@ function toggleChatMenu() {
 
 // Ajusta rótulos/itens do menu consoante o chat aberto seja o grupo "geral" ou uma conversa 1-para-1
 function atualizarItensMenuGrupo() {
-  const ehGrupo = currentChatId === 'geral';
+  const ehGrupo = chatTipoAtual === 'grupo' || chatTipoAtual === 'anuncio';
   const itemSair = document.getElementById('item-sair-grupo');
   const itemVerContato = document.getElementById('item-ver-contato');
+  const itemAdicionar = document.getElementById('item-adicionar-membro');
   if (itemSair) itemSair.classList.toggle('hidden', !ehGrupo);
   if (itemVerContato) itemVerContato.innerText = ehGrupo ? 'Ver membros' : 'Ver Contato';
+  if (itemAdicionar) itemAdicionar.classList.toggle('hidden', !(ehGrupo && comunidadeIdAtual));
 }
 
 function verContatoOuMembros() {
   fecharChatMenu();
-  if (currentChatId === 'geral') {
+  if (chatTipoAtual === 'grupo' || chatTipoAtual === 'anuncio') {
     abrirMembrosGrupo();
   } else {
     mostrarToast('Ver Contato — em breve');
@@ -1357,7 +1605,7 @@ function abrirMembrosGrupo() {
   lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px;">A carregar...</p>';
   modal.classList.remove('hidden');
 
-  db.collection('chats').doc('geral').get().then((doc) => {
+  db.collection('chats').doc(currentChatId).get().then((doc) => {
     const membros = (doc.exists && doc.data().participantes) || [];
     document.getElementById('membros-modal-titulo').innerText = 'Membros (' + membros.length + ')';
     lista.innerHTML = '';
@@ -1377,6 +1625,7 @@ function abrirMembrosGrupo() {
     }
   }).catch((err) => {
     console.error('Erro ao carregar membros:', err);
+
     lista.innerHTML = '<p style="color:#f15c6d; font-size:13px; padding:16px;">Não foi possível carregar os membros.</p>';
   });
 }
@@ -1387,17 +1636,72 @@ function fecharMembrosModal() {
 
 function sairDoGrupo() {
   fecharChatMenu();
-  if (!window.confirm('Sair do Chat Geral da Comunidade? Deixarás de ver as mensagens deste grupo.')) return;
+  if (!window.confirm('Sair de "' + chatNameAtual + '"? Deixarás de ver as mensagens deste grupo.')) return;
 
   const email = getCurrentUserEmail();
-  db.collection('chats').doc('geral').update({
+  const chatIdASair = currentChatId;
+
+  db.collection('chats').doc(chatIdASair).update({
     participantes: firebase.firestore.FieldValue.arrayRemove(email)
-  }).then(() => db.collection('usuarios').doc(email).set({ saiuDoGrupoGeral: true }, { merge: true }))
-    .then(() => closeChat())
+  }).then(() => {
+    if (chatIdASair === 'geral') {
+      return db.collection('usuarios').doc(email).set({ saiuDoGrupoGeral: true }, { merge: true });
+    }
+  }).then(() => closeChat())
     .catch((err) => {
       console.error('Erro ao sair do grupo:', err);
       alert('Não foi possível sair do grupo.');
     });
+}
+
+// Adicionar membro da comunidade a este grupo específico
+function abrirAdicionarMembro() {
+  fecharChatMenu();
+  if (!comunidadeIdAtual) return;
+
+  const modal = document.getElementById('adicionar-membro-modal');
+  const lista = document.getElementById('adicionar-membro-lista');
+  lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px;">A carregar...</p>';
+  modal.classList.remove('hidden');
+
+  Promise.all([
+    db.collection('comunidades').doc(comunidadeIdAtual).get(),
+    db.collection('chats').doc(currentChatId).get()
+  ]).then(([comunidadeDoc, chatDoc]) => {
+    const membrosComunidade = (comunidadeDoc.exists && comunidadeDoc.data().membros) || [];
+    const membrosGrupo = (chatDoc.exists && chatDoc.data().participantes) || [];
+    const disponiveis = membrosComunidade.filter((e) => !membrosGrupo.includes(e));
+
+    lista.innerHTML = '';
+    if (!disponiveis.length) {
+      lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px; text-align:center;">Todos os membros da comunidade já estão neste grupo.</p>';
+      return;
+    }
+
+    disponiveis.forEach((email) => {
+      const nome = email.split('@')[0];
+      const item = document.createElement('div');
+      item.className = 'chat-item';
+      item.style.cursor = 'pointer';
+      item.onclick = () => {
+        db.collection('chats').doc(currentChatId).update({
+          participantes: firebase.firestore.FieldValue.arrayUnion(email)
+        }).then(() => abrirAdicionarMembro()).catch((err) => console.error('Erro ao adicionar membro:', err));
+      };
+      item.innerHTML =
+        '<div class="avatar" style="background:#a682e3;">' + nome.substring(0, 2).toUpperCase() + '</div>' +
+        '<div class="chat-info"><h4>' + nome + '</h4><p>' + email + '</p></div>' +
+        '<i class="fa-solid fa-plus" style="color:var(--whatsapp-teal); font-size:16px;"></i>';
+      lista.appendChild(item);
+    });
+  }).catch((err) => {
+    console.error('Erro ao carregar membros disponíveis:', err);
+    lista.innerHTML = '<p style="color:#f15c6d; font-size:13px; padding:16px;">Não foi possível carregar.</p>';
+  });
+}
+
+function fecharAdicionarMembro() {
+  document.getElementById('adicionar-membro-modal').classList.add('hidden');
 }
 
 function fecharChatMenu() {
