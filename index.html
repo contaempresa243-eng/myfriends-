@@ -131,12 +131,13 @@
       <!-- Menu do cabeçalho (3 pontos) -->
       <div id="chat-menu" class="hidden" style="position:absolute; top:52px; right:10px; background:var(--whatsapp-panel); border:1px solid #2a3942; border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,0.4); z-index:250; width:235px; overflow:hidden;">
         <div class="chat-menu-item" onclick="acaoMenuChat('novo-grupo')">Novo grupo</div>
-        <div class="chat-menu-item" onclick="acaoMenuChat('ver-contato')">Ver Contato</div>
+        <div class="chat-menu-item" id="item-ver-contato" onclick="verContatoOuMembros()">Ver Contato</div>
         <div class="chat-menu-item" onclick="abrirPesquisaMensagens()">Pesquisar</div>
         <div class="chat-menu-item" onclick="abrirFicheirosLigacoes()">Ficheiros, ligações e documentos</div>
         <div class="chat-menu-item" id="item-notificacao" onclick="toggleNotificacao()">Desativar notificação</div>
         <div class="chat-menu-item" onclick="acaoMenuChat('temporarias')">Mensagens temporárias</div>
         <div class="chat-menu-item" onclick="acaoMenuChat('tema')">Tema da conversa</div>
+        <div class="chat-menu-item hidden" id="item-sair-grupo" style="color:#f15c6d;" onclick="sairDoGrupo()">Sair do grupo</div>
         <div class="chat-menu-item" onclick="toggleChatMenuMais(event)" style="display:flex; justify-content:space-between; align-items:center;">
           Mais <span class="fa-solid fa-chevron-right" style="font-size:11px; color:#8696a0;"></span>
         </div>
@@ -149,6 +150,15 @@
         <div class="chat-menu-item" onclick="limparConversa()">Limpar conversa</div>
         <div class="chat-menu-item" onclick="acaoMenuChat('estrela')">Marcar com estrelas</div>
         <div class="chat-menu-item" onclick="acaoMenuChat('nao-lida')">Marcar como não lida</div>
+      </div>
+
+      <!-- Modal: Membros do grupo -->
+      <div id="membros-modal" class="hidden" style="position:absolute; inset:0; background:var(--whatsapp-panel); z-index:260; display:flex; flex-direction:column;">
+        <div style="display:flex; align-items:center; padding:14px; border-bottom:1px solid #2a3942; flex-shrink:0;">
+          <span class="fa-solid fa-arrow-left" onclick="fecharMembrosModal()" style="color:#aebac1; margin-right:16px; cursor:pointer;"></span>
+          <h3 id="membros-modal-titulo" style="color:#e9edef; font-size:16px;">Membros</h3>
+        </div>
+        <div id="membros-modal-lista" style="flex:1; overflow-y:auto;"></div>
       </div>
 
       <!-- Modal: Ficheiros, ligações e documentos -->
