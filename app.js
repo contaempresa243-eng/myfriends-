@@ -32,6 +32,7 @@ auth.onAuthStateChanged((user) => {
   if (user) {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('main-screen').style.display = 'flex';
+    registarUsuarioAtual();
     const firstTab = document.querySelector('.tab-item');
     if (firstTab) switchTab('chats', firstTab);
   } else {
@@ -39,6 +40,16 @@ auth.onAuthStateChanged((user) => {
     document.getElementById('login-screen').style.display = 'flex';
   }
 });
+
+// Regista/atualiza o utilizador atual na coleção "usuarios", para poder aparecer na lista de contactos
+function registarUsuarioAtual() {
+  const email = getCurrentUserEmail();
+  if (!email) return;
+  db.collection('usuarios').doc(email).set({
+    email: email,
+    ultimaEntrada: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge: true }).catch((err) => console.error('Erro ao registar utilizador:', err));
+}
 
 // Traduz códigos de erro comuns do Firebase Auth para mensagens em português
 function mensagemErroAuth(error) {
@@ -143,13 +154,23 @@ function logoutUser() {
 completarLoginPorLink();
 
 // Navegação por Abas
+let unsubscribeConversas = null;
+
 function switchTab(tabName, element) {
   document.querySelectorAll('.tab-item').forEach(tab => tab.classList.remove('active'));
   element.classList.add('active');
 
   const contentArea = document.getElementById('tab-content');
+  const fab = document.getElementById('fab-nova-conversa');
+
+  // Sai da escuta em tempo real da lista de conversas ao trocar de separador
+  if (unsubscribeConversas) {
+    unsubscribeConversas();
+    unsubscribeConversas = null;
+  }
 
   if (tabName === 'chats') {
+    fab.classList.remove('hidden');
     contentArea.innerHTML = `
       <div class="chat-item" onclick="openChat('geral', 'Chat Geral da Comunidade')">
         <div class="avatar" style="background:var(--whatsapp-teal);">GG</div>
@@ -157,14 +178,112 @@ function switchTab(tabName, element) {
           <h4>Chat Geral</h4>
           <p>Clica para entrar na conversa em tempo real.</p>
         </div>
-      </div>`;
+      </div>
+      <div id="lista-conversas-1v1"></div>`;
+    escutarListaConversas();
   } else if (tabName === 'updates') {
+    fab.classList.add('hidden');
     contentArea.innerHTML = `<div style="padding: 20px; color: #8696a0; font-size:14px;"><strong>Estados</strong><br><br>Partilha atualizações com os teus amigos.</div>`;
   } else if (tabName === 'communities') {
+    fab.classList.add('hidden');
     contentArea.innerHTML = `<div style="padding: 20px; color: #8696a0; font-size:14px;">Comunidades unificadas do myFriens.</div>`;
   } else if (tabName === 'calls') {
+    fab.classList.add('hidden');
     contentArea.innerHTML = `<div style="padding: 20px; color: #8696a0; font-size:14px;">Histórico de chamadas recentes.</div>`;
   }
+}
+
+// Escuta em tempo real as conversas 1-para-1 do utilizador atual
+function escutarListaConversas() {
+  const myEmail = getCurrentUserEmail();
+  if (!myEmail) return;
+
+  unsubscribeConversas = db.collection('chats')
+    .where('participantes', 'array-contains', myEmail)
+    .onSnapshot((snapshot) => {
+      const container = document.getElementById('lista-conversas-1v1');
+      if (!container) return;
+      container.innerHTML = '';
+
+      snapshot.forEach((doc) => {
+        const chat = doc.data();
+        const outroEmail = (chat.participantes || []).find((p) => p !== myEmail) || 'Contacto';
+        const nome = outroEmail.split('@')[0];
+
+        const item = document.createElement('div');
+        item.className = 'chat-item';
+        item.onclick = () => openChat(doc.id, nome);
+        item.innerHTML =
+          '<div class="avatar" style="background:#4a90d9;">' + nome.substring(0, 2).toUpperCase() + '</div>' +
+          '<div class="chat-info"><h4>' + nome + '</h4><p>' + outroEmail + '</p></div>';
+        container.appendChild(item);
+      });
+    }, (err) => console.error('Erro ao carregar conversas:', err));
+}
+
+// ---- Nova conversa / lista de contactos ----
+function abrirNovoContato() {
+  const modal = document.getElementById('novo-contato-modal');
+  const lista = document.getElementById('novo-contato-lista');
+  lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px;">A carregar contactos...</p>';
+  modal.classList.remove('hidden');
+
+  const myEmail = getCurrentUserEmail();
+  db.collection('usuarios').get()
+    .then((snapshot) => {
+      lista.innerHTML = '';
+      let encontrouAlgum = false;
+
+      snapshot.forEach((doc) => {
+        const u = doc.data();
+        if (!u.email || u.email === myEmail) return;
+        encontrouAlgum = true;
+
+        const nome = u.email.split('@')[0];
+        const item = document.createElement('div');
+        item.className = 'chat-item';
+        item.onclick = () => iniciarConversaCom(u.email);
+        item.innerHTML =
+          '<div class="avatar" style="background:#a682e3;">' + nome.substring(0, 2).toUpperCase() + '</div>' +
+          '<div class="chat-info"><h4>' + nome + '</h4><p>' + u.email + '</p></div>';
+        lista.appendChild(item);
+      });
+
+      if (!encontrouAlgum) {
+        lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px; text-align:center;">Ainda não há outros utilizadores registados no myFriens.</p>';
+      }
+    })
+    .catch((err) => {
+      console.error('Erro ao carregar contactos:', err);
+      lista.innerHTML = '<p style="color:#f15c6d; font-size:13px; padding:16px;">Não foi possível carregar os contactos.</p>';
+    });
+}
+
+function fecharNovoContato() {
+  document.getElementById('novo-contato-modal').classList.add('hidden');
+}
+
+// Cria (se necessário) e abre a conversa 1-para-1 com outro utilizador
+function iniciarConversaCom(outroEmail) {
+  const myEmail = getCurrentUserEmail();
+  if (!myEmail || !outroEmail) return;
+
+  const participantes = [myEmail, outroEmail].sort();
+  const chatId = participantes.join('__');
+
+  db.collection('chats').doc(chatId).set({
+    type: '1v1',
+    participantes: participantes,
+    atualizadoEm: firebase.firestore.FieldValue.serverTimestamp()
+  }, { merge: true })
+    .then(() => {
+      fecharNovoContato();
+      openChat(chatId, outroEmail.split('@')[0]);
+    })
+    .catch((err) => {
+      console.error('Erro ao iniciar conversa:', err);
+      alert('Não foi possível iniciar a conversa.');
+    });
 }
 
 // Menu Flutuante
