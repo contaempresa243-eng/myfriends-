@@ -225,38 +225,101 @@ function escutarListaConversas() {
 function abrirNovoContato() {
   const modal = document.getElementById('novo-contato-modal');
   const lista = document.getElementById('novo-contato-lista');
-  lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px;">A carregar contactos...</p>';
   modal.classList.remove('hidden');
+  lista.innerHTML = '';
 
-  const myEmail = getCurrentUserEmail();
-  db.collection('usuarios').get()
-    .then((snapshot) => {
-      lista.innerHTML = '';
-      let encontrouAlgum = false;
+  if (!('contacts' in navigator) || !('ContactsManager' in window)) {
+    lista.innerHTML = '<p style="color:#f15c6d; font-size:13px; padding:16px; text-align:center;">O teu navegador não suporta aceder aos contactos do telemóvel. Esta função só funciona no Chrome para Android.</p>';
+    return;
+  }
 
-      snapshot.forEach((doc) => {
-        const u = doc.data();
-        if (!u.email || u.email === myEmail) return;
-        encontrouAlgum = true;
+  lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px;">A abrir os contactos do telemóvel...</p>';
 
-        const nome = u.email.split('@')[0];
-        const item = document.createElement('div');
-        item.className = 'chat-item';
-        item.onclick = () => iniciarConversaCom(u.email);
-        item.innerHTML =
-          '<div class="avatar" style="background:#a682e3;">' + nome.substring(0, 2).toUpperCase() + '</div>' +
-          '<div class="chat-info"><h4>' + nome + '</h4><p>' + u.email + '</p></div>';
-        lista.appendChild(item);
-      });
-
-      if (!encontrouAlgum) {
-        lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px; text-align:center;">Ainda não há outros utilizadores registados no myFriens.</p>';
+  navigator.contacts.select(['name', 'tel', 'email'], { multiple: true })
+    .then((contactos) => {
+      if (!contactos || !contactos.length) {
+        lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px; text-align:center;">Nenhum contacto selecionado.</p>';
+        return;
       }
+      renderizarContactosTelefone(contactos);
     })
     .catch((err) => {
-      console.error('Erro ao carregar contactos:', err);
-      lista.innerHTML = '<p style="color:#f15c6d; font-size:13px; padding:16px;">Não foi possível carregar os contactos.</p>';
+      console.error('Erro ao aceder aos contactos:', err);
+      lista.innerHTML = '';
     });
+}
+
+// Cruza os contactos do telemóvel com os utilizadores já registados no myFriens
+function renderizarContactosTelefone(contactos) {
+  const lista = document.getElementById('novo-contato-lista');
+  lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px;">A verificar quem já está no myFriens...</p>';
+
+  const emailsUnicos = Array.from(new Set(
+    contactos.map((c) => (c.email && c.email[0]) || '').filter(Boolean).map((e) => e.toLowerCase())
+  )).slice(0, 30); // limite do operador "in" do Firestore
+
+  const buscarRegistados = emailsUnicos.length
+    ? db.collection('usuarios').where('email', 'in', emailsUnicos).get()
+        .then((snap) => new Set(snap.docs.map((d) => d.id)))
+    : Promise.resolve(new Set());
+
+  buscarRegistados.then((registados) => {
+    lista.innerHTML = '';
+
+    contactos.forEach((c) => {
+      const nome = (c.name && c.name[0]) || 'Contacto';
+      const email = (c.email && c.email[0]) || '';
+      const tel = (c.tel && c.tel[0]) || '';
+      const estaRegistado = !!(email && registados.has(email.toLowerCase()));
+
+      const item = document.createElement('div');
+      item.className = 'chat-item';
+      item.style.cursor = estaRegistado ? 'pointer' : 'default';
+
+      const corAvatar = estaRegistado ? '#4a90d9' : '#667781';
+      item.innerHTML =
+        '<div class="avatar" style="background:' + corAvatar + ';">' + nome.substring(0, 2).toUpperCase() + '</div>' +
+        '<div class="chat-info" style="flex:1; min-width:0;"><h4>' + nome + '</h4><p>' + (email || tel || 'Sem contacto disponível') + '</p></div>';
+
+      if (estaRegistado) {
+        item.onclick = () => iniciarConversaCom(email);
+      } else {
+        const btnConvidar = document.createElement('button');
+        btnConvidar.innerText = 'Convidar';
+        btnConvidar.style.cssText = 'background:var(--whatsapp-teal); color:#fff; border:none; border-radius:16px; padding:6px 14px; font-size:12px; cursor:pointer; flex-shrink:0;';
+        btnConvidar.onclick = (e) => {
+          e.stopPropagation();
+          convidarContacto(nome, email, tel);
+        };
+        item.appendChild(btnConvidar);
+      }
+
+      lista.appendChild(item);
+    });
+  }).catch((err) => {
+    console.error('Erro ao verificar utilizadores registados:', err);
+    lista.innerHTML = '<p style="color:#f15c6d; font-size:13px; padding:16px;">Não foi possível verificar os contactos.</p>';
+  });
+}
+
+// Convida um contacto que ainda não está no myFriens
+function convidarContacto(nome, email, tel) {
+  const link = window.location.origin + window.location.pathname;
+  const texto = 'Olá ' + nome + '! Estou a usar o myFriens, uma app de conversas. Entra também: ' + link;
+
+  if (navigator.share) {
+    navigator.share({ text: texto }).catch(() => {});
+    return;
+  }
+  if (email) {
+    window.location.href = 'mailto:' + email + '?subject=' + encodeURIComponent('Convite para o myFriens') + '&body=' + encodeURIComponent(texto);
+    return;
+  }
+  if (tel) {
+    window.location.href = 'sms:' + tel + '?body=' + encodeURIComponent(texto);
+    return;
+  }
+  navigator.clipboard.writeText(texto).then(() => alert('Link copiado! Envia-o ao teu contacto.'));
 }
 
 function fecharNovoContato() {
