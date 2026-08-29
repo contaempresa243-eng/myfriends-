@@ -247,6 +247,39 @@
 
   </div>
 
+  <!-- Ecrã de Chamada (voz/vídeo) -->
+  <div id="call-screen" class="hidden" style="position:fixed; inset:0; background:#111b21; z-index:400; display:flex; flex-direction:column; align-items:center; justify-content:space-between; padding:30px 20px;">
+    <div style="text-align:center; margin-top:40px; z-index:1;">
+      <div class="avatar" id="call-avatar" style="width:90px; height:90px; font-size:32px; margin:0 auto 16px;">--</div>
+      <h2 id="call-nome" style="color:#e9edef; font-size:20px;"></h2>
+      <p id="call-status" style="color:#8696a0; font-size:14px; margin-top:6px;"></p>
+    </div>
+
+    <div id="call-video-area" class="hidden" style="position:absolute; inset:0;">
+      <video id="call-remote-video" autoplay playsinline style="width:100%; height:100%; object-fit:cover; background:#000;"></video>
+      <video id="call-local-video" autoplay playsinline muted style="position:absolute; bottom:110px; right:16px; width:100px; height:140px; object-fit:cover; border-radius:10px; border:2px solid #2a3942; background:#000;"></video>
+    </div>
+    <audio id="call-remote-audio" autoplay></audio>
+
+    <div id="call-botoes-normal" style="display:flex; gap:24px; z-index:1;">
+      <div id="call-btn-mudo" onclick="alternarMudo()" style="width:52px; height:52px; border-radius:50%; background:rgba(255,255,255,0.15); display:flex; align-items:center; justify-content:center; cursor:pointer;">
+        <span class="fa-solid fa-microphone" style="color:#fff; font-size:20px;"></span>
+      </div>
+      <div onclick="terminarChamada()" style="width:60px; height:60px; border-radius:50%; background:#c41e3a; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+        <span class="fa-solid fa-phone-slash" style="color:#fff; font-size:22px;"></span>
+      </div>
+    </div>
+
+    <div id="call-botoes-receber" class="hidden" style="display:flex; gap:40px; z-index:1;">
+      <div onclick="recusarChamada()" style="width:60px; height:60px; border-radius:50%; background:#c41e3a; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+        <span class="fa-solid fa-phone-slash" style="color:#fff; font-size:22px;"></span>
+      </div>
+      <div onclick="aceitarChamada()" style="width:60px; height:60px; border-radius:50%; background:#00a884; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+        <span class="fa-solid fa-phone" style="color:#fff; font-size:22px;"></span>
+      </div>
+    </div>
+  </div>
+
   <script defer src="app.js"></script>
 </body>
 </html>
