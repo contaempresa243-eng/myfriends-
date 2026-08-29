@@ -224,9 +224,60 @@ function escutarListaConversas() {
 // ---- Nova conversa / lista de contactos ----
 function abrirNovoContato() {
   const modal = document.getElementById('novo-contato-modal');
-  const lista = document.getElementById('novo-contato-lista');
+  document.getElementById('email-novo-contato').value = '';
+  document.getElementById('email-novo-contato-status').innerText = '';
+  document.getElementById('novo-contato-lista').innerHTML = '';
   modal.classList.remove('hidden');
-  lista.innerHTML = '';
+}
+
+// Inicia (ou avisa que ainda não existe) uma conversa a partir de um email escrito manualmente
+function iniciarPorEmail() {
+  const input = document.getElementById('email-novo-contato');
+  const status = document.getElementById('email-novo-contato-status');
+  const email = input.value.trim().toLowerCase();
+  const myEmail = getCurrentUserEmail();
+
+  if (!email || !email.includes('@')) {
+    status.style.color = '#f15c6d';
+    status.innerText = 'Escreve um email válido.';
+    return;
+  }
+  if (email === myEmail) {
+    status.style.color = '#f15c6d';
+    status.innerText = 'Esse é o teu próprio email.';
+    return;
+  }
+
+  status.style.color = '#8696a0';
+  status.innerText = 'A verificar...';
+
+  db.collection('usuarios').doc(email).get()
+    .then((doc) => {
+      if (doc.exists) {
+        iniciarConversaCom(email);
+        return;
+      }
+      status.style.color = '#f15c6d';
+      status.innerHTML = '';
+      const texto = document.createElement('span');
+      texto.innerText = 'Este email ainda não está no myFriens. ';
+      const btnConvidar = document.createElement('button');
+      btnConvidar.innerText = 'Convidar';
+      btnConvidar.style.cssText = 'background:var(--whatsapp-teal); color:#fff; border:none; border-radius:14px; padding:4px 12px; font-size:12px; cursor:pointer; margin-left:4px;';
+      btnConvidar.onclick = () => convidarContacto(email.split('@')[0], email, '');
+      status.appendChild(texto);
+      status.appendChild(btnConvidar);
+    })
+    .catch((err) => {
+      console.error('Erro ao verificar email:', err);
+      status.style.color = '#f15c6d';
+      status.innerText = 'Não foi possível verificar. Tenta novamente.';
+    });
+}
+
+// Abre o seletor de contactos do telemóvel (Chrome Android)
+function abrirContactosTelefone() {
+  const lista = document.getElementById('novo-contato-lista');
 
   if (!('contacts' in navigator) || !('ContactsManager' in window)) {
     lista.innerHTML = '<p style="color:#f15c6d; font-size:13px; padding:16px; text-align:center;">O teu navegador não suporta aceder aos contactos do telemóvel. Esta função só funciona no Chrome para Android.</p>';
