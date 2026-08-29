@@ -45,10 +45,23 @@ auth.onAuthStateChanged((user) => {
 function registarUsuarioAtual() {
   const email = getCurrentUserEmail();
   if (!email) return;
-  db.collection('usuarios').doc(email).set({
-    email: email,
-    ultimaEntrada: firebase.firestore.FieldValue.serverTimestamp()
-  }, { merge: true }).catch((err) => console.error('Erro ao registar utilizador:', err));
+  const usuarioRef = db.collection('usuarios').doc(email);
+
+  usuarioRef.get().then((doc) => {
+    const saiuDoGrupo = doc.exists && doc.data().saiuDoGrupoGeral === true;
+
+    return usuarioRef.set({
+      email: email,
+      ultimaEntrada: firebase.firestore.FieldValue.serverTimestamp()
+    }, { merge: true }).then(() => {
+      if (saiuDoGrupo) return;
+      return db.collection('chats').doc('geral').set({
+        type: 'grupo',
+        nome: 'Chat Geral da Comunidade',
+        participantes: firebase.firestore.FieldValue.arrayUnion(email)
+      }, { merge: true });
+    });
+  }).catch((err) => console.error('Erro ao registar utilizador:', err));
 }
 
 // Traduz códigos de erro comuns do Firebase Auth para mensagens em português
@@ -171,15 +184,7 @@ function switchTab(tabName, element) {
 
   if (tabName === 'chats') {
     fab.classList.remove('hidden');
-    contentArea.innerHTML = `
-      <div class="chat-item" onclick="openChat('geral', 'Chat Geral da Comunidade')">
-        <div class="avatar" style="background:var(--whatsapp-teal);">GG</div>
-        <div class="chat-info">
-          <h4>Chat Geral</h4>
-          <p>Clica para entrar na conversa em tempo real.</p>
-        </div>
-      </div>
-      <div id="lista-conversas-1v1"></div>`;
+    contentArea.innerHTML = '<div id="lista-conversas"></div>';
     escutarListaConversas();
   } else if (tabName === 'updates') {
     fab.classList.add('hidden');
@@ -201,21 +206,43 @@ function escutarListaConversas() {
   unsubscribeConversas = db.collection('chats')
     .where('participantes', 'array-contains', myEmail)
     .onSnapshot((snapshot) => {
-      const container = document.getElementById('lista-conversas-1v1');
+      const container = document.getElementById('lista-conversas');
       if (!container) return;
+
+      // O grupo "geral" aparece sempre primeiro, o resto por ordem de chegada
+      const docs = snapshot.docs.slice().sort((a, b) => {
+        if (a.id === 'geral') return -1;
+        if (b.id === 'geral') return 1;
+        return 0;
+      });
+
       container.innerHTML = '';
 
-      snapshot.forEach((doc) => {
-        const chat = doc.data();
-        const outroEmail = (chat.participantes || []).find((p) => p !== myEmail) || 'Contacto';
-        const nome = outroEmail.split('@')[0];
+      if (!docs.length) {
+        container.innerHTML = '<p style="padding:24px; color:#8696a0; font-size:14px; text-align:center;">Ainda não tens conversas.</p>';
+        return;
+      }
 
+      docs.forEach((doc) => {
+        const chat = doc.data();
         const item = document.createElement('div');
         item.className = 'chat-item';
-        item.onclick = () => openChat(doc.id, nome, outroEmail);
-        item.innerHTML =
-          '<div class="avatar" style="background:#4a90d9;">' + nome.substring(0, 2).toUpperCase() + '</div>' +
-          '<div class="chat-info"><h4>' + nome + '</h4><p>' + outroEmail + '</p></div>';
+
+        if (doc.id === 'geral' || chat.type === 'grupo') {
+          const nomeGrupo = chat.nome || 'Chat Geral da Comunidade';
+          item.onclick = () => openChat('geral', nomeGrupo);
+          item.innerHTML =
+            '<div class="avatar" style="background:var(--whatsapp-teal);">GG</div>' +
+            '<div class="chat-info"><h4>' + nomeGrupo + '</h4><p>Clica para entrar na conversa em tempo real.</p></div>';
+        } else {
+          const outroEmail = (chat.participantes || []).find((p) => p !== myEmail) || 'Contacto';
+          const nome = outroEmail.split('@')[0];
+          item.onclick = () => openChat(doc.id, nome, outroEmail);
+          item.innerHTML =
+            '<div class="avatar" style="background:#4a90d9;">' + nome.substring(0, 2).toUpperCase() + '</div>' +
+            '<div class="chat-info"><h4>' + nome + '</h4><p>' + outroEmail + '</p></div>';
+        }
+
         container.appendChild(item);
       });
     }, (err) => console.error('Erro ao carregar conversas:', err));
@@ -1303,6 +1330,74 @@ function toggleChatMenu() {
   fecharChatMenuMais();
   document.getElementById('chat-menu').classList.toggle('hidden');
   atualizarTextoNotificacao();
+  atualizarItensMenuGrupo();
+}
+
+// Ajusta rótulos/itens do menu consoante o chat aberto seja o grupo "geral" ou uma conversa 1-para-1
+function atualizarItensMenuGrupo() {
+  const ehGrupo = currentChatId === 'geral';
+  const itemSair = document.getElementById('item-sair-grupo');
+  const itemVerContato = document.getElementById('item-ver-contato');
+  if (itemSair) itemSair.classList.toggle('hidden', !ehGrupo);
+  if (itemVerContato) itemVerContato.innerText = ehGrupo ? 'Ver membros' : 'Ver Contato';
+}
+
+function verContatoOuMembros() {
+  fecharChatMenu();
+  if (currentChatId === 'geral') {
+    abrirMembrosGrupo();
+  } else {
+    mostrarToast('Ver Contato — em breve');
+  }
+}
+
+function abrirMembrosGrupo() {
+  const modal = document.getElementById('membros-modal');
+  const lista = document.getElementById('membros-modal-lista');
+  lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px;">A carregar...</p>';
+  modal.classList.remove('hidden');
+
+  db.collection('chats').doc('geral').get().then((doc) => {
+    const membros = (doc.exists && doc.data().participantes) || [];
+    document.getElementById('membros-modal-titulo').innerText = 'Membros (' + membros.length + ')';
+    lista.innerHTML = '';
+
+    membros.forEach((email) => {
+      const nome = email.split('@')[0];
+      const item = document.createElement('div');
+      item.className = 'chat-item';
+      item.innerHTML =
+        '<div class="avatar" style="background:#4a90d9;">' + nome.substring(0, 2).toUpperCase() + '</div>' +
+        '<div class="chat-info"><h4>' + nome + '</h4><p>' + email + '</p></div>';
+      lista.appendChild(item);
+    });
+
+    if (!membros.length) {
+      lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px; text-align:center;">Nenhum membro encontrado.</p>';
+    }
+  }).catch((err) => {
+    console.error('Erro ao carregar membros:', err);
+    lista.innerHTML = '<p style="color:#f15c6d; font-size:13px; padding:16px;">Não foi possível carregar os membros.</p>';
+  });
+}
+
+function fecharMembrosModal() {
+  document.getElementById('membros-modal').classList.add('hidden');
+}
+
+function sairDoGrupo() {
+  fecharChatMenu();
+  if (!window.confirm('Sair do Chat Geral da Comunidade? Deixarás de ver as mensagens deste grupo.')) return;
+
+  const email = getCurrentUserEmail();
+  db.collection('chats').doc('geral').update({
+    participantes: firebase.firestore.FieldValue.arrayRemove(email)
+  }).then(() => db.collection('usuarios').doc(email).set({ saiuDoGrupoGeral: true }, { merge: true }))
+    .then(() => closeChat())
+    .catch((err) => {
+      console.error('Erro ao sair do grupo:', err);
+      alert('Não foi possível sair do grupo.');
+    });
 }
 
 function fecharChatMenu() {
