@@ -96,6 +96,27 @@
         <span class="fa-solid fa-comment-medical" style="color:#fff; font-size:20px;"></span>
       </div>
 
+      <!-- Botão flutuante: nova comunidade (só visível no separador Comunidades) -->
+      <div id="fab-nova-comunidade" class="hidden" onclick="abrirCriarComunidade()" style="position:absolute; bottom:20px; right:20px; width:52px; height:52px; border-radius:50%; background:var(--whatsapp-teal); display:flex; align-items:center; justify-content:center; box-shadow:0 4px 10px rgba(0,0,0,0.4); cursor:pointer; z-index:50;">
+        <span class="fa-solid fa-users" style="color:#fff; font-size:20px;"></span>
+      </div>
+
+      <!-- Modal: criar comunidade -->
+      <div id="criar-comunidade-modal" class="hidden" style="position:absolute; inset:0; background:var(--whatsapp-panel); z-index:260; display:flex; flex-direction:column;">
+        <div style="display:flex; align-items:center; padding:14px; border-bottom:1px solid #2a3942; flex-shrink:0;">
+          <span class="fa-solid fa-arrow-left" onclick="fecharCriarComunidade()" style="color:#aebac1; margin-right:16px; cursor:pointer;"></span>
+          <h3 style="color:#e9edef; font-size:16px;">Nova comunidade</h3>
+        </div>
+        <div style="padding:16px;">
+          <label style="color:#8696a0; font-size:12px;">Nome da comunidade</label>
+          <input type="text" id="comunidade-nome" placeholder="Ex: Escola Primavera" style="width:100%; padding:10px 12px; background:#2a3942; border:none; border-radius:8px; color:#fff; font-size:14px; outline:none; margin:6px 0 16px;">
+          <label style="color:#8696a0; font-size:12px;">Descrição (opcional)</label>
+          <textarea id="comunidade-descricao" placeholder="Do que se trata esta comunidade?" style="width:100%; padding:10px 12px; background:#2a3942; border:none; border-radius:8px; color:#fff; font-size:14px; outline:none; margin:6px 0 16px; min-height:70px; resize:vertical;"></textarea>
+          <button onclick="criarComunidade()" style="width:100%; padding:12px; background:var(--whatsapp-teal); color:#fff; border:none; border-radius:8px; font-weight:bold; font-size:14px; cursor:pointer;">Criar</button>
+          <p id="criar-comunidade-status" style="font-size:12px; margin-top:10px; color:#8696a0; min-height:14px;"></p>
+        </div>
+      </div>
+
       <!-- Modal: escolher contacto para nova conversa -->
       <div id="novo-contato-modal" class="hidden" style="position:absolute; inset:0; background:var(--whatsapp-panel); z-index:260; display:flex; flex-direction:column;">
         <div style="display:flex; align-items:center; padding:14px; border-bottom:1px solid #2a3942; flex-shrink:0;">
@@ -104,6 +125,37 @@
         </div>
 
         <div id="novo-contato-lista" style="flex:1; overflow-y:auto;"></div>
+      </div>
+    </div>
+
+    <!-- Ecrã de Comunidade (Anúncios + grupos) -->
+    <div id="community-screen" class="screen" style="display:none; flex-direction:column; height:100%; position:relative;">
+      <header style="background:var(--whatsapp-panel);">
+        <div style="display:flex; align-items:center; flex:1; min-width:0;">
+          <span class="fa-solid fa-arrow-left" onclick="fecharComunidade()" style="margin-right:15px; cursor:pointer; color:#aebac1; flex-shrink:0;"></span>
+          <h3 id="community-nome" style="font-size:16px; color:#e9edef; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Comunidade</h3>
+        </div>
+        <span class="fa-solid fa-ellipsis-vertical" onclick="toggleComunidadeMenu()" style="color:#aebac1; cursor:pointer;"></span>
+      </header>
+
+      <div id="comunidade-menu" class="hidden" style="position:absolute; top:52px; right:10px; background:var(--whatsapp-panel); border:1px solid #2a3942; border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,0.4); z-index:250; width:210px; overflow:hidden;">
+        <div class="chat-menu-item" onclick="abrirMembrosComunidade()">Ver membros</div>
+        <div class="chat-menu-item" style="color:#f15c6d;" onclick="sairDaComunidade()">Sair da comunidade</div>
+      </div>
+
+      <div id="comunidade-lista-grupos" style="flex:1; overflow-y:auto;"></div>
+
+      <div onclick="abrirCriarGrupoComunidade()" style="position:absolute; bottom:20px; right:20px; width:52px; height:52px; border-radius:50%; background:var(--whatsapp-teal); display:flex; align-items:center; justify-content:center; box-shadow:0 4px 10px rgba(0,0,0,0.4); cursor:pointer; z-index:50;">
+        <span class="fa-solid fa-plus" style="color:#fff; font-size:20px;"></span>
+      </div>
+
+      <!-- Modal: membros da comunidade -->
+      <div id="membros-comunidade-modal" class="hidden" style="position:absolute; inset:0; background:var(--whatsapp-panel); z-index:270; display:flex; flex-direction:column;">
+        <div style="display:flex; align-items:center; padding:14px; border-bottom:1px solid #2a3942; flex-shrink:0;">
+          <span class="fa-solid fa-arrow-left" onclick="fecharMembrosComunidade()" style="color:#aebac1; margin-right:16px; cursor:pointer;"></span>
+          <h3 id="membros-comunidade-titulo" style="color:#e9edef; font-size:16px;">Membros</h3>
+        </div>
+        <div id="membros-comunidade-lista" style="flex:1; overflow-y:auto;"></div>
       </div>
     </div>
 
@@ -137,6 +189,7 @@
         <div class="chat-menu-item" id="item-notificacao" onclick="toggleNotificacao()">Desativar notificação</div>
         <div class="chat-menu-item" onclick="acaoMenuChat('temporarias')">Mensagens temporárias</div>
         <div class="chat-menu-item" onclick="acaoMenuChat('tema')">Tema da conversa</div>
+        <div class="chat-menu-item hidden" id="item-adicionar-membro" onclick="abrirAdicionarMembro()">Adicionar membro</div>
         <div class="chat-menu-item hidden" id="item-sair-grupo" style="color:#f15c6d;" onclick="sairDoGrupo()">Sair do grupo</div>
         <div class="chat-menu-item" onclick="toggleChatMenuMais(event)" style="display:flex; justify-content:space-between; align-items:center;">
           Mais <span class="fa-solid fa-chevron-right" style="font-size:11px; color:#8696a0;"></span>
@@ -159,6 +212,15 @@
           <h3 id="membros-modal-titulo" style="color:#e9edef; font-size:16px;">Membros</h3>
         </div>
         <div id="membros-modal-lista" style="flex:1; overflow-y:auto;"></div>
+      </div>
+
+      <!-- Modal: Adicionar membro (de dentro da comunidade) a este grupo -->
+      <div id="adicionar-membro-modal" class="hidden" style="position:absolute; inset:0; background:var(--whatsapp-panel); z-index:270; display:flex; flex-direction:column;">
+        <div style="display:flex; align-items:center; padding:14px; border-bottom:1px solid #2a3942; flex-shrink:0;">
+          <span class="fa-solid fa-arrow-left" onclick="fecharAdicionarMembro()" style="color:#aebac1; margin-right:16px; cursor:pointer;"></span>
+          <h3 style="color:#e9edef; font-size:16px;">Adicionar membro</h3>
+        </div>
+        <div id="adicionar-membro-lista" style="flex:1; overflow-y:auto;"></div>
       </div>
 
       <!-- Modal: Ficheiros, ligações e documentos -->
