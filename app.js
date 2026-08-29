@@ -224,55 +224,8 @@ function escutarListaConversas() {
 // ---- Nova conversa / lista de contactos ----
 function abrirNovoContato() {
   const modal = document.getElementById('novo-contato-modal');
-  document.getElementById('email-novo-contato').value = '';
-  document.getElementById('email-novo-contato-status').innerText = '';
   document.getElementById('novo-contato-lista').innerHTML = '';
   modal.classList.remove('hidden');
-}
-
-// Inicia (ou avisa que ainda não existe) uma conversa a partir de um email escrito manualmente
-function iniciarPorEmail() {
-  const input = document.getElementById('email-novo-contato');
-  const status = document.getElementById('email-novo-contato-status');
-  const email = input.value.trim().toLowerCase();
-  const myEmail = getCurrentUserEmail();
-
-  if (!email || !email.includes('@')) {
-    status.style.color = '#f15c6d';
-    status.innerText = 'Escreve um email válido.';
-    return;
-  }
-  if (email === myEmail) {
-    status.style.color = '#f15c6d';
-    status.innerText = 'Esse é o teu próprio email.';
-    return;
-  }
-
-  status.style.color = '#8696a0';
-  status.innerText = 'A verificar...';
-
-  db.collection('usuarios').doc(email).get()
-    .then((doc) => {
-      if (doc.exists) {
-        iniciarConversaCom(email);
-        return;
-      }
-      status.style.color = '#f15c6d';
-      status.innerHTML = '';
-      const texto = document.createElement('span');
-      texto.innerText = 'Este email ainda não está no myFriens. ';
-      const btnConvidar = document.createElement('button');
-      btnConvidar.innerText = 'Convidar';
-      btnConvidar.style.cssText = 'background:var(--whatsapp-teal); color:#fff; border:none; border-radius:14px; padding:4px 12px; font-size:12px; cursor:pointer; margin-left:4px;';
-      btnConvidar.onclick = () => convidarContacto(email.split('@')[0], email, '');
-      status.appendChild(texto);
-      status.appendChild(btnConvidar);
-    })
-    .catch((err) => {
-      console.error('Erro ao verificar email:', err);
-      status.style.color = '#f15c6d';
-      status.innerText = 'Não foi possível verificar. Tenta novamente.';
-    });
 }
 
 // Abre o seletor de contactos do telemóvel (Chrome Android)
@@ -305,23 +258,32 @@ function renderizarContactosTelefone(contactos) {
   const lista = document.getElementById('novo-contato-lista');
   lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px;">A verificar quem já está no myFriens...</p>';
 
-  const emailsUnicos = Array.from(new Set(
-    contactos.map((c) => (c.email && c.email[0]) || '').filter(Boolean).map((e) => e.toLowerCase())
-  )).slice(0, 30); // limite do operador "in" do Firestore
+  // Traz todos os utilizadores registados uma vez, para cruzar por email OU por telefone
+  db.collection('usuarios').get().then((snapshot) => {
+    const emailsRegistados = new Set();
+    const telefonesRegistados = new Map(); // telefoneNormalizado -> email
 
-  const buscarRegistados = emailsUnicos.length
-    ? db.collection('usuarios').where('email', 'in', emailsUnicos).get()
-        .then((snap) => new Set(snap.docs.map((d) => d.id)))
-    : Promise.resolve(new Set());
+    snapshot.forEach((doc) => {
+      const u = doc.data();
+      if (u.email) emailsRegistados.add(u.email.toLowerCase());
+      if (u.telefoneNormalizado) telefonesRegistados.set(u.telefoneNormalizado, u.email);
+    });
 
-  buscarRegistados.then((registados) => {
     lista.innerHTML = '';
 
     contactos.forEach((c) => {
       const nome = (c.name && c.name[0]) || 'Contacto';
       const email = (c.email && c.email[0]) || '';
       const tel = (c.tel && c.tel[0]) || '';
-      const estaRegistado = !!(email && registados.has(email.toLowerCase()));
+      const telNormalizado = normalizarTelefone(tel);
+
+      let emailEncontrado = '';
+      if (email && emailsRegistados.has(email.toLowerCase())) {
+        emailEncontrado = email.toLowerCase();
+      } else if (telNormalizado && telefonesRegistados.has(telNormalizado)) {
+        emailEncontrado = telefonesRegistados.get(telNormalizado);
+      }
+      const estaRegistado = !!emailEncontrado;
 
       const item = document.createElement('div');
       item.className = 'chat-item';
@@ -333,7 +295,7 @@ function renderizarContactosTelefone(contactos) {
         '<div class="chat-info" style="flex:1; min-width:0;"><h4>' + nome + '</h4><p>' + (email || tel || 'Sem contacto disponível') + '</p></div>';
 
       if (estaRegistado) {
-        item.onclick = () => iniciarConversaCom(email);
+        item.onclick = () => iniciarConversaCom(emailEncontrado);
       } else {
         const btnConvidar = document.createElement('button');
         btnConvidar.innerText = 'Convidar';
@@ -403,6 +365,66 @@ function iniciarConversaCom(outroEmail) {
 // Menu Flutuante
 function toggleMenu() {
   document.getElementById('dropdown-menu').classList.toggle('hidden');
+}
+
+// ---- Definições ----
+function openSettings() {
+  document.getElementById('dropdown-menu').classList.add('hidden');
+  document.getElementById('settings-email').innerText = getCurrentUserEmail();
+  document.getElementById('settings-telefone-status').innerText = '';
+
+  const input = document.getElementById('settings-telefone');
+  input.value = '';
+
+  const myEmail = getCurrentUserEmail();
+  db.collection('usuarios').doc(myEmail).get().then((doc) => {
+    if (doc.exists && doc.data().telefone) {
+      input.value = doc.data().telefone;
+    }
+  }).catch((err) => console.error('Erro ao carregar telefone:', err));
+
+  document.getElementById('settings-modal').classList.remove('hidden');
+}
+
+function closeSettings() {
+  document.getElementById('settings-modal').classList.add('hidden');
+}
+
+function guardarTelefonePerfil() {
+  const input = document.getElementById('settings-telefone');
+  const status = document.getElementById('settings-telefone-status');
+  const telefone = input.value.trim();
+  const myEmail = getCurrentUserEmail();
+
+  if (!telefone) {
+    status.style.color = '#f15c6d';
+    status.innerText = 'Escreve um número de telefone.';
+    return;
+  }
+
+  status.style.color = '#8696a0';
+  status.innerText = 'A guardar...';
+
+  db.collection('usuarios').doc(myEmail).set({
+    telefone: telefone,
+    telefoneNormalizado: normalizarTelefone(telefone)
+  }, { merge: true })
+    .then(() => {
+      status.style.color = '#00a884';
+      status.innerText = 'Número guardado.';
+    })
+    .catch((err) => {
+      console.error('Erro ao guardar telefone:', err);
+      status.style.color = '#f15c6d';
+      status.innerText = 'Não foi possível guardar. Tenta novamente.';
+    });
+}
+
+// Normaliza um número de telefone para os últimos 9 dígitos, para comparar formatos diferentes
+// (ex: "+244 924 308 868", "924308868" e "00244924308868" tornam-se todos "924308868")
+function normalizarTelefone(numero) {
+  const apenasDigitos = (numero || '').replace(/\D/g, '');
+  return apenasDigitos.slice(-9);
 }
 
 // Abrir Chat Individual / Grupo
