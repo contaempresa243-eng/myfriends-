@@ -499,7 +499,9 @@ function construirConteudoMensagem(msg) {
   if (msg.type === 'imagem') {
     const img = document.createElement('img');
     img.src = msg.url;
-    img.style.cssText = 'max-width:100%; border-radius:8px; display:block; cursor:pointer;';
+    img.style.cssText = 'max-width:100%; border-radius:8px; display:block; cursor:pointer; -webkit-touch-callout:none; -webkit-user-select:none; user-select:none;';
+    img.draggable = false;
+    img.oncontextmenu = () => false;
     img.onclick = () => {
       if (mensagensSelecionadas.size > 0) return;
       window.open(msg.url, '_blank');
@@ -616,7 +618,11 @@ function loadMessages() {
           max-width: 70%;
           font-size: 14px;
           word-break: break-word;
+          -webkit-touch-callout: none;
+          -webkit-user-select: none;
+          user-select: none;
         `;
+        bubble.oncontextmenu = () => false;
 
         if (msg.encaminhada) {
           const enc = document.createElement('div');
