@@ -224,8 +224,8 @@ function escutarListaConversas() {
 // ---- Nova conversa / lista de contactos ----
 function abrirNovoContato() {
   const modal = document.getElementById('novo-contato-modal');
-  document.getElementById('novo-contato-lista').innerHTML = '';
   modal.classList.remove('hidden');
+  abrirContactosTelefone();
 }
 
 // Abre o seletor de contactos do telemóvel (Chrome Android)
