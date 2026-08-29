@@ -48,7 +48,7 @@
     </div>
 
     <!-- Ecrã Principal (Oculto até fazer login) -->
-    <div id="main-screen" class="screen" style="display:none; flex-direction:column; height:100%;">
+    <div id="main-screen" class="screen" style="display:none; flex-direction:column; height:100%; position:relative;">
       <header>
         <h1>myFriens</h1>
         <div class="header-icons">
@@ -69,7 +69,21 @@
         <div class="tab-item" data-target="calls" onclick="switchTab('calls', this)">Ligações</div>
       </div>
 
-      <div class="content-area" id="tab-content"></div>
+      <div class="content-area" id="tab-content" style="position:relative;"></div>
+
+      <!-- Botão flutuante: nova conversa (só visível no separador Conversas) -->
+      <div id="fab-nova-conversa" class="hidden" onclick="abrirNovoContato()" style="position:absolute; bottom:20px; right:20px; width:52px; height:52px; border-radius:50%; background:var(--whatsapp-teal); display:flex; align-items:center; justify-content:center; box-shadow:0 4px 10px rgba(0,0,0,0.4); cursor:pointer; z-index:50;">
+        <span class="fa-solid fa-comment-medical" style="color:#fff; font-size:20px;"></span>
+      </div>
+
+      <!-- Modal: escolher contacto para nova conversa -->
+      <div id="novo-contato-modal" class="hidden" style="position:absolute; inset:0; background:var(--whatsapp-panel); z-index:260; display:flex; flex-direction:column;">
+        <div style="display:flex; align-items:center; padding:14px; border-bottom:1px solid #2a3942; flex-shrink:0;">
+          <span class="fa-solid fa-arrow-left" onclick="fecharNovoContato()" style="color:#aebac1; margin-right:16px; cursor:pointer;"></span>
+          <h3 style="color:#e9edef; font-size:16px;">Novo contacto</h3>
+        </div>
+        <div id="novo-contato-lista" style="flex:1; overflow-y:auto;"></div>
+      </div>
     </div>
 
     <!-- Ecrã de Conversa Detalhada -->
