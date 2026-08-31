@@ -269,7 +269,15 @@ function escutarListaComunidades() {
       container.innerHTML = '';
 
       if (snapshot.empty) {
-        container.innerHTML = '<p style="padding:24px; color:#8696a0; font-size:14px; text-align:center;">Ainda não fazes parte de nenhuma comunidade. Toca em + para criar uma.</p>';
+        container.innerHTML =
+          '<div style="padding:30px 24px; text-align:center;">' +
+            '<div style="width:100px; height:100px; border-radius:20px; background:#182229; margin:20px auto; display:flex; align-items:center; justify-content:center;">' +
+              '<span class="fa-solid fa-people-group" style="color:var(--whatsapp-teal); font-size:38px;"></span>' +
+            '</div>' +
+            '<h3 style="color:#e9edef; font-size:17px; margin-bottom:10px;">Mantém-te em contacto com uma comunidade</h3>' +
+            '<p style="color:#8696a0; font-size:13px; line-height:1.5; margin-bottom:24px;">As comunidades juntam os membros em grupos organizados por tópicos e permitem receber facilmente comunicados dos administradores.</p>' +
+            '<button onclick="abrirCriarComunidade()" style="width:100%; padding:13px; background:var(--whatsapp-teal); color:#fff; border:none; border-radius:24px; font-weight:bold; font-size:14px; cursor:pointer;">Criar uma comunidade</button>' +
+          '</div>';
         return;
       }
 
@@ -279,8 +287,8 @@ function escutarListaComunidades() {
         item.className = 'chat-item';
         item.onclick = () => abrirComunidade(doc.id, com);
         item.innerHTML =
-          '<div class="avatar" style="background:#a682e3;">' + (com.nome || 'C').substring(0, 2).toUpperCase() + '</div>' +
-          '<div class="chat-info"><h4>' + (com.nome || 'Comunidade') + '</h4><p>' + ((com.membros && com.membros.length) || 0) + ' membros</p></div>';
+          '<div class="avatar" style="background:#a682e3;"><i class="fa-solid fa-people-group" style="font-size:16px;"></i></div>' +
+          '<div class="chat-info"><h4>' + (com.nome || 'Comunidade') + '</h4><p>Comunidade</p></div>';
         container.appendChild(item);
       });
     }, (err) => console.error('Erro ao carregar comunidades:', err));
@@ -288,9 +296,15 @@ function escutarListaComunidades() {
 
 function abrirCriarComunidade() {
   document.getElementById('comunidade-nome').value = '';
-  document.getElementById('comunidade-descricao').value = '';
+  document.getElementById('comunidade-descricao').value = 'Olá a todos! Esta comunidade é para os membros conversarem em grupos organizados por tópicos e receberem comunicados importantes.';
   document.getElementById('criar-comunidade-status').innerText = '';
+  atualizarContadorComunidade();
   document.getElementById('criar-comunidade-modal').classList.remove('hidden');
+}
+
+function atualizarContadorComunidade() {
+  const nome = document.getElementById('comunidade-nome').value;
+  document.getElementById('comunidade-nome-contador').innerText = nome.length + '/100';
 }
 
 function fecharCriarComunidade() {
@@ -321,12 +335,18 @@ function criarComunidade() {
     membros: [myEmail],
     criadoEm: firebase.firestore.FieldValue.serverTimestamp()
   })
-    .then(() => db.collection('chats').doc(comunidadeRef.id + '_anuncios').set({
+    .then(() => db.collection('chats').doc(comunidadeRef.id + '_comunicados').set({
       type: 'anuncio',
-      nome: 'Anúncios',
+      nome: 'Comunicados',
       comunidadeId: comunidadeRef.id,
       apenasAdminsEscrevem: true,
       admins: [myEmail],
+      participantes: [myEmail]
+    }))
+    .then(() => db.collection('chats').add({
+      type: 'grupo',
+      nome: 'Geral',
+      comunidadeId: comunidadeRef.id,
       participantes: [myEmail]
     }))
     .then(() => {
@@ -351,6 +371,7 @@ function abrirComunidade(comunidadeId, dados) {
   document.getElementById('main-screen').style.display = 'none';
   document.getElementById('community-screen').style.display = 'flex';
   document.getElementById('community-nome').innerText = dados.nome || 'Comunidade';
+  document.getElementById('community-subtitulo').innerText = 'Comunidade';
 
   escutarGruposComunidade();
 }
@@ -389,29 +410,49 @@ function escutarGruposComunidade() {
       if (!container) return;
       container.innerHTML = '';
 
-      const docs = snapshot.docs.slice().sort((a, b) => {
-        if (a.data().type === 'anuncio') return -1;
-        if (b.data().type === 'anuncio') return 1;
-        return 0;
-      });
+      const anuncio = snapshot.docs.find((d) => d.data().type === 'anuncio');
+      const grupos = snapshot.docs.filter((d) => d.data().type !== 'anuncio');
 
-      docs.forEach((doc) => {
+      document.getElementById('community-subtitulo').innerText = 'Comunidade · ' + grupos.length + ' grupo' + (grupos.length === 1 ? '' : 's');
+
+      function criarItemChat(doc, ehAnuncio) {
         const chat = doc.data();
         const item = document.createElement('div');
         item.className = 'chat-item';
-        const ehAnuncio = chat.type === 'anuncio';
         item.onclick = () => openChat(doc.id, chat.nome, null, {
           tipo: ehAnuncio ? 'anuncio' : 'grupo',
           comunidadeId: comunidadeAtualId,
           apenasAdmins: !!chat.apenasAdminsEscrevem,
           admins: chat.admins || []
         });
+        const numMembros = (chat.participantes && chat.participantes.length) || 0;
+        const subtitulo = ehAnuncio
+          ? 'Só administradores enviam mensagens'
+          : (numMembros <= 1 ? 'Adicione membros para começar a conversar' : numMembros + ' membros');
         item.innerHTML =
-          '<div class="avatar" style="background:' + (ehAnuncio ? '#e17055' : 'var(--whatsapp-teal)') + ';">' +
-          (ehAnuncio ? '📢' : (chat.nome || 'G').substring(0, 2).toUpperCase()) + '</div>' +
-          '<div class="chat-info"><h4>' + (chat.nome || 'Grupo') + '</h4><p>' + (ehAnuncio ? 'Só administradores escrevem' : ((chat.participantes && chat.participantes.length) || 0) + ' membros') + '</p></div>';
-        container.appendChild(item);
-      });
+          '<div class="avatar" style="background:' + (ehAnuncio ? '#00a884' : '#667781') + ';">' +
+          (ehAnuncio ? '<i class="fa-solid fa-bullhorn" style="font-size:16px;"></i>' : '<i class="fa-solid fa-comment" style="font-size:16px;"></i>') + '</div>' +
+          '<div class="chat-info"><h4>' + (chat.nome || 'Grupo') + '</h4><p>' + subtitulo + '</p></div>';
+        return item;
+      }
+
+      if (anuncio) {
+        container.appendChild(criarItemChat(anuncio, true));
+      }
+
+      const tituloGrupos = document.createElement('p');
+      tituloGrupos.innerText = 'Os seus grupos';
+      tituloGrupos.style.cssText = 'padding:14px 16px 6px; color:#8696a0; font-size:12px; font-weight:bold; text-transform:uppercase;';
+      container.appendChild(tituloGrupos);
+
+      grupos.forEach((doc) => container.appendChild(criarItemChat(doc, false)));
+
+      if (!grupos.length) {
+        const vazio = document.createElement('p');
+        vazio.innerText = 'Os outros grupos adicionados à comunidade aparecem aqui.';
+        vazio.style.cssText = 'padding:16px; color:#8696a0; font-size:13px; text-align:center;';
+        container.appendChild(vazio);
+      }
     }, (err) => console.error('Erro ao carregar grupos da comunidade:', err));
 }
 
