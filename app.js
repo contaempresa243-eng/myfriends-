@@ -198,7 +198,6 @@ function switchTab(tabName, element) {
   } else if (tabName === 'updates') {
     contentArea.innerHTML = `<div style="padding: 20px; color: #8696a0; font-size:14px;"><strong>Estados</strong><br><br>Partilha atualizações com os teus amigos.</div>`;
   } else if (tabName === 'communities') {
-    fabComunidade.classList.remove('hidden');
     contentArea.innerHTML = '<div id="lista-comunidades"></div>';
     escutarListaComunidades();
   } else if (tabName === 'calls') {
@@ -268,7 +267,10 @@ function escutarListaComunidades() {
       if (!container) return;
       container.innerHTML = '';
 
+      const fabComunidade = document.getElementById('fab-nova-comunidade');
+
       if (snapshot.empty) {
+        if (fabComunidade) fabComunidade.classList.add('hidden');
         container.innerHTML =
           '<div style="padding:30px 24px; text-align:center;">' +
             '<div style="width:100px; height:100px; border-radius:20px; background:#182229; margin:20px auto; display:flex; align-items:center; justify-content:center;">' +
@@ -280,6 +282,8 @@ function escutarListaComunidades() {
           '</div>';
         return;
       }
+
+      if (fabComunidade) fabComunidade.classList.remove('hidden');
 
       snapshot.forEach((doc) => {
         const com = doc.data();
@@ -294,13 +298,30 @@ function escutarListaComunidades() {
     }, (err) => console.error('Erro ao carregar comunidades:', err));
 }
 
+let comunidadeFotoFicheiro = null;
+
 function abrirCriarComunidade() {
   document.getElementById('comunidade-nome').value = '';
   document.getElementById('comunidade-descricao').value = 'Olá a todos! Esta comunidade é para os membros conversarem em grupos organizados por tópicos e receberem comunicados importantes.';
   document.getElementById('criar-comunidade-status').innerText = '';
+  comunidadeFotoFicheiro = null;
+  document.getElementById('comunidade-foto-preview').innerHTML = '<span class="fa-solid fa-users" style="color:#667781; font-size:34px;"></span>';
   atualizarContadorComunidade();
   document.getElementById('criar-comunidade-modal').classList.remove('hidden');
 }
+
+document.addEventListener('DOMContentLoaded', () => {
+  const inputFoto = document.getElementById('comunidade-foto-input');
+  if (inputFoto) {
+    inputFoto.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+      comunidadeFotoFicheiro = file;
+      const preview = document.getElementById('comunidade-foto-preview');
+      preview.innerHTML = '<img src="' + URL.createObjectURL(file) + '" style="width:100%; height:100%; object-fit:cover;">';
+    });
+  }
+});
 
 function atualizarContadorComunidade() {
   const nome = document.getElementById('comunidade-nome').value;
@@ -327,14 +348,28 @@ function criarComunidade() {
   status.innerText = 'A criar...';
 
   const comunidadeRef = db.collection('comunidades').doc();
-  comunidadeRef.set({
+
+  const enviarFoto = comunidadeFotoFicheiro
+    ? (() => {
+        const formData = new FormData();
+        formData.append('file', comunidadeFotoFicheiro);
+        formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+        return fetch('https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/auto/upload', { method: 'POST', body: formData })
+          .then((res) => res.json())
+          .then((data) => data.secure_url || null)
+          .catch(() => null);
+      })()
+    : Promise.resolve(null);
+
+  enviarFoto.then((fotoUrl) => comunidadeRef.set({
     nome: nome,
     descricao: descricao,
+    foto: fotoUrl || null,
     criadoPor: myEmail,
     admins: [myEmail],
     membros: [myEmail],
     criadoEm: firebase.firestore.FieldValue.serverTimestamp()
-  })
+  }))
     .then(() => db.collection('chats').doc(comunidadeRef.id + '_comunicados').set({
       type: 'anuncio',
       nome: 'Comunicados',
@@ -356,7 +391,7 @@ function criarComunidade() {
     .catch((err) => {
       console.error('Erro ao criar comunidade:', err);
       status.style.color = '#f15c6d';
-      status.innerText = 'Não foi possível criar. Tenta novamente.';
+      status.innerText = 'Não foi possível criar (' + (err.code || err.message || 'erro') + '). Verifica as regras do Firestore.';
     });
 }
 
