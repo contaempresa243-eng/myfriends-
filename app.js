@@ -782,6 +782,7 @@ function openChat(chatId, chatName, outroEmail, extra) {
   chatAdminsAtual = (extra && extra.admins) || [];
 
   document.getElementById('main-screen').style.display = 'none';
+  document.getElementById('community-screen').style.display = 'none';
   document.getElementById('chat-room-screen').style.display = 'flex';
   mensagensSelecionadas.clear();
   renderHeaderNormal();
@@ -796,7 +797,13 @@ function openChat(chatId, chatName, outroEmail, extra) {
 
 function closeChat() {
   document.getElementById('chat-room-screen').style.display = 'none';
-  document.getElementById('main-screen').style.display = 'flex';
+
+  if (comunidadeIdAtual) {
+    document.getElementById('community-screen').style.display = 'flex';
+  } else {
+    document.getElementById('main-screen').style.display = 'flex';
+  }
+
   mensagensSelecionadas.clear();
   cancelarResposta();
   fecharChatMenu();
