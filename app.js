@@ -216,8 +216,11 @@ function escutarListaConversas() {
       const container = document.getElementById('lista-conversas');
       if (!container) return;
 
+      // Chats de comunidades (Comunicados/grupos dentro delas) não aparecem aqui — só dentro da própria comunidade
+      const docsFiltrados = snapshot.docs.filter((doc) => !doc.data().comunidadeId);
+
       // O grupo "geral" aparece sempre primeiro, o resto por ordem de chegada
-      const docs = snapshot.docs.slice().sort((a, b) => {
+      const docs = docsFiltrados.slice().sort((a, b) => {
         if (a.id === 'geral') return -1;
         if (b.id === 'geral') return 1;
         return 0;
@@ -237,7 +240,7 @@ function escutarListaConversas() {
 
         if (doc.id === 'geral' || chat.type === 'grupo') {
           const nomeGrupo = chat.nome || 'Chat Geral da Comunidade';
-          item.onclick = () => openChat('geral', nomeGrupo);
+          item.onclick = () => openChat(doc.id, nomeGrupo);
           item.innerHTML =
             '<div class="avatar" style="background:var(--whatsapp-teal);">GG</div>' +
             '<div class="chat-info"><h4>' + nomeGrupo + '</h4><p>Clica para entrar na conversa em tempo real.</p></div>';
