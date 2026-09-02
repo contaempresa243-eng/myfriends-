@@ -1696,27 +1696,31 @@ function toggleChatMenu() {
   fecharChatMenuMais();
   document.getElementById('chat-menu').classList.toggle('hidden');
   atualizarTextoNotificacao();
-  atualizarItensMenuGrupo();
 }
 
-// Ajusta rótulos/itens do menu consoante o chat aberto seja o grupo "geral" ou uma conversa 1-para-1
-function atualizarItensMenuGrupo() {
-  const ehGrupo = chatTipoAtual === 'grupo' || chatTipoAtual === 'anuncio';
-  const itemSair = document.getElementById('item-sair-grupo');
-  const itemVerContato = document.getElementById('item-ver-contato');
-  const itemAdicionar = document.getElementById('item-adicionar-membro');
-  if (itemSair) itemSair.classList.toggle('hidden', !ehGrupo);
-  if (itemVerContato) itemVerContato.innerText = ehGrupo ? 'Ver membros' : 'Ver Contato';
-  if (itemAdicionar) itemAdicionar.classList.toggle('hidden', !(ehGrupo && comunidadeIdAtual));
-}
-
-function verContatoOuMembros() {
+function abrirAdicionarAmigosGrupo() {
   fecharChatMenu();
-  if (chatTipoAtual === 'grupo' || chatTipoAtual === 'anuncio') {
-    abrirMembrosGrupo();
-  } else {
-    mostrarToast('Ver Contato — em breve');
-  }
+  mostrarToast('Adicionar Amigos — em breve');
+}
+
+function abrirDetalhesGrupo() {
+  fecharChatMenu();
+  mostrarToast('Detalhes do grupo — em breve');
+}
+
+function exportarConversas() {
+  fecharChatMenuMais();
+  mostrarToast('Exportar conversas — em breve');
+}
+
+function adicionarAtalho() {
+  fecharChatMenuMais();
+  mostrarToast('Adicionar atalho — em breve');
+}
+
+function adicionarLista() {
+  fecharChatMenuMais();
+  mostrarToast('Adicionar a lista — em breve');
 }
 
 function abrirMembrosGrupo() {
