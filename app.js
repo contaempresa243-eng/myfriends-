@@ -1698,11 +1698,6 @@ function toggleChatMenu() {
   atualizarTextoNotificacao();
 }
 
-function abrirAdicionarAmigosGrupo() {
-  fecharChatMenu();
-  mostrarToast('Adicionar Amigos — em breve');
-}
-
 function abrirDetalhesGrupo() {
   fecharChatMenu();
   mostrarToast('Detalhes do grupo — em breve');
@@ -1779,12 +1774,25 @@ function sairDoGrupo() {
 }
 
 // Adicionar membro da comunidade a este grupo específico
-function abrirAdicionarMembro() {
+let membrosDisponiveisAtual = [];
+const amigosSelecionados = new Set();
+
+function abrirAdicionarAmigosGrupo() {
   fecharChatMenu();
-  if (!comunidadeIdAtual) return;
+  abrirAdicionarMembro();
+}
+
+function abrirAdicionarMembro() {
+  if (!comunidadeIdAtual) {
+    mostrarToast('Este grupo não pertence a nenhuma comunidade.');
+    return;
+  }
 
   const modal = document.getElementById('adicionar-membro-modal');
   const lista = document.getElementById('adicionar-membro-lista');
+  document.getElementById('adicionar-membro-pesquisa').value = '';
+  amigosSelecionados.clear();
+  atualizarBotaoConfirmarAmigos();
   lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px;">A carregar...</p>';
   modal.classList.remove('hidden');
 
@@ -1794,34 +1802,80 @@ function abrirAdicionarMembro() {
   ]).then(([comunidadeDoc, chatDoc]) => {
     const membrosComunidade = (comunidadeDoc.exists && comunidadeDoc.data().membros) || [];
     const membrosGrupo = (chatDoc.exists && chatDoc.data().participantes) || [];
-    const disponiveis = membrosComunidade.filter((e) => !membrosGrupo.includes(e));
-
-    lista.innerHTML = '';
-    if (!disponiveis.length) {
-      lista.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px; text-align:center;">Todos os membros da comunidade já estão neste grupo.</p>';
-      return;
-    }
-
-    disponiveis.forEach((email) => {
-      const nome = email.split('@')[0];
-      const item = document.createElement('div');
-      item.className = 'chat-item';
-      item.style.cursor = 'pointer';
-      item.onclick = () => {
-        db.collection('chats').doc(currentChatId).update({
-          participantes: firebase.firestore.FieldValue.arrayUnion(email)
-        }).then(() => abrirAdicionarMembro()).catch((err) => console.error('Erro ao adicionar membro:', err));
-      };
-      item.innerHTML =
-        '<div class="avatar" style="background:#a682e3;">' + nome.substring(0, 2).toUpperCase() + '</div>' +
-        '<div class="chat-info"><h4>' + nome + '</h4><p>' + email + '</p></div>' +
-        '<i class="fa-solid fa-plus" style="color:var(--whatsapp-teal); font-size:16px;"></i>';
-      lista.appendChild(item);
-    });
+    membrosDisponiveisAtual = membrosComunidade.filter((e) => !membrosGrupo.includes(e));
+    renderizarAdicionarMembro(membrosDisponiveisAtual);
   }).catch((err) => {
     console.error('Erro ao carregar membros disponíveis:', err);
     lista.innerHTML = '<p style="color:#f15c6d; font-size:13px; padding:16px;">Não foi possível carregar.</p>';
   });
+}
+
+function renderizarAdicionarMembro(lista) {
+  const container = document.getElementById('adicionar-membro-lista');
+  container.innerHTML = '';
+
+  if (!lista.length) {
+    container.innerHTML = '<p style="color:#8696a0; font-size:13px; padding:16px; text-align:center;">Nenhum membro disponível para adicionar.</p>';
+    return;
+  }
+
+  lista.forEach((email) => {
+    const nome = email.split('@')[0];
+    const item = document.createElement('div');
+    item.className = 'chat-item';
+    item.style.cursor = 'pointer';
+    const circulo = document.createElement('div');
+    circulo.id = 'circulo-' + email.replace(/[^a-zA-Z0-9]/g, '');
+    const marcado = amigosSelecionados.has(email);
+    circulo.style.cssText = 'width:22px; height:22px; border-radius:50%; border:2px solid ' + (marcado ? 'var(--whatsapp-teal)' : '#667781') + '; background:' + (marcado ? 'var(--whatsapp-teal)' : 'transparent') + '; display:flex; align-items:center; justify-content:center; flex-shrink:0;';
+    circulo.innerHTML = marcado ? '<span class="fa-solid fa-check" style="color:#fff; font-size:11px;"></span>' : '';
+
+    item.onclick = () => {
+      if (amigosSelecionados.has(email)) amigosSelecionados.delete(email);
+      else amigosSelecionados.add(email);
+      renderizarAdicionarMembro(membrosDisponiveisAtual);
+      atualizarBotaoConfirmarAmigos();
+    };
+
+    item.innerHTML =
+      '<div class="avatar" style="background:#a682e3;">' + nome.substring(0, 2).toUpperCase() + '</div>' +
+      '<div class="chat-info"><h4>' + nome + '</h4><p>' + email + '</p></div>';
+    item.appendChild(circulo);
+    container.appendChild(item);
+  });
+}
+
+function filtrarAdicionarMembro() {
+  const termo = document.getElementById('adicionar-membro-pesquisa').value.trim().toLowerCase();
+  const filtrados = membrosDisponiveisAtual.filter((email) => email.toLowerCase().includes(termo));
+  renderizarAdicionarMembro(filtrados);
+}
+
+function atualizarBotaoConfirmarAmigos() {
+  document.getElementById('adicionar-membro-confirmar').classList.toggle('hidden', amigosSelecionados.size === 0);
+}
+
+function confirmarAdicionarAmigos() {
+  if (!amigosSelecionados.size) return;
+  db.collection('chats').doc(currentChatId).update({
+    participantes: firebase.firestore.FieldValue.arrayUnion(...Array.from(amigosSelecionados))
+  }).then(() => {
+    fecharAdicionarMembro();
+  }).catch((err) => {
+    console.error('Erro ao adicionar membros:', err);
+    alert('Não foi possível adicionar os membros.');
+  });
+}
+
+function convidarPorLigacaoGrupo() {
+  const link = window.location.origin + window.location.pathname;
+  const texto = 'Vem conversar comigo no myFriens: ' + link;
+
+  if (navigator.share) {
+    navigator.share({ text: texto }).catch(() => {});
+  } else {
+    navigator.clipboard.writeText(texto).then(() => alert('Link copiado! Envia-o a quem quiseres convidar.'));
+  }
 }
 
 function fecharAdicionarMembro() {
