@@ -518,6 +518,21 @@ function abrirCriarGrupoComunidade() {
   });
 }
 
+function abrirDetalhesComunidade() {
+  fecharComunidadeMenu();
+  mostrarToast('Detalhes da comunidade — em breve');
+}
+
+function abrirConvidarAmigosComunidade() {
+  fecharComunidadeMenu();
+  mostrarToast('Convidar Amigos — em breve');
+}
+
+function abrirDefinicoesComunidade() {
+  fecharComunidadeMenu();
+  mostrarToast('Definições da comunidade — em breve');
+}
+
 function abrirMembrosComunidade() {
   fecharComunidadeMenu();
   const modal = document.getElementById('membros-comunidade-modal');
@@ -1843,9 +1858,8 @@ document.addEventListener('click', (e) => {
 function mostrarToast(texto) {
   const toast = document.createElement('div');
   toast.innerText = texto;
-  toast.style.cssText = 'position:absolute; bottom:90px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:8px 16px; border-radius:20px; font-size:13px; z-index:300; box-shadow:0 2px 8px rgba(0,0,0,0.3); white-space:nowrap;';
-  const tela = document.getElementById('chat-room-screen');
-  tela.appendChild(toast);
+  toast.style.cssText = 'position:fixed; bottom:90px; left:50%; transform:translateX(-50%); background:#333; color:#fff; padding:8px 16px; border-radius:20px; font-size:13px; z-index:500; box-shadow:0 2px 8px rgba(0,0,0,0.3); white-space:nowrap;';
+  document.body.appendChild(toast);
   setTimeout(() => toast.remove(), 1800);
 }
 
