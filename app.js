@@ -511,6 +511,7 @@ let criarGrupoFotoFicheiro = null;
 
 function abrirCriarGrupoComunidade() {
   document.getElementById('criar-grupo-nome').value = '';
+  document.getElementById('criar-grupo-descricao').value = '';
   document.getElementById('criar-grupo-status').innerText = '';
   criarGrupoFotoFicheiro = null;
   document.getElementById('criar-grupo-foto-preview').innerHTML = '<span class="fa-solid fa-users" style="color:#667781; font-size:34px;"></span>';
@@ -542,6 +543,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 function criarGrupoComunidade() {
   const nome = document.getElementById('criar-grupo-nome').value.trim();
+  const descricao = document.getElementById('criar-grupo-descricao').value.trim();
   const status = document.getElementById('criar-grupo-status');
   const myEmail = getCurrentUserEmail();
 
@@ -569,6 +571,7 @@ function criarGrupoComunidade() {
   enviarFoto.then((fotoUrl) => db.collection('chats').add({
     type: 'grupo',
     nome: nome,
+    descricao: descricao,
     foto: fotoUrl || null,
     comunidadeId: comunidadeAtualId,
     participantes: [myEmail]
@@ -1808,6 +1811,14 @@ function abrirDetalhesGrupo() {
 
     document.getElementById('detalhes-grupo-subtitulo').innerText = 'Grupo · ' + membros.length + ' membro' + (membros.length === 1 ? '' : 's');
     document.getElementById('detalhes-grupo-membros-titulo').innerText = 'Membros (' + membros.length + ')';
+
+    const descEl = document.getElementById('detalhes-grupo-descricao');
+    if (chat.descricao) {
+      descEl.innerText = chat.descricao;
+      descEl.classList.remove('hidden');
+    } else {
+      descEl.classList.add('hidden');
+    }
 
     const avatarDiv = document.getElementById('detalhes-grupo-avatar');
     avatarDiv.innerHTML = chat.foto

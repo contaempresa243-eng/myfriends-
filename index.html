@@ -194,6 +194,9 @@
           <input type="text" id="criar-grupo-nome" maxlength="100" placeholder="Ex: Vinho Tinto" oninput="atualizarContadorGrupo()" style="width:100%; padding:10px 12px; background:#2a3942; border:none; border-radius:8px; color:#fff; font-size:14px; outline:none; margin:6px 0 4px;">
           <p id="criar-grupo-nome-contador" style="text-align:right; color:#667781; font-size:11px; margin-bottom:16px;">0/100</p>
 
+          <label style="color:#8696a0; font-size:12px;">Descrição (opcional)</label>
+          <textarea id="criar-grupo-descricao" maxlength="512" placeholder="Do que se trata este grupo?" style="width:100%; padding:10px 12px; background:#2a3942; border:none; border-radius:8px; color:#fff; font-size:14px; outline:none; margin:6px 0 20px; min-height:80px; resize:vertical;"></textarea>
+
           <p id="criar-grupo-status" style="font-size:12px; color:#8696a0; min-height:14px;"></p>
         </div>
         <div style="display:flex; justify-content:flex-end; padding:16px;">
@@ -421,6 +424,7 @@
       </div>
       <h2 id="detalhes-grupo-nome" style="color:#e9edef; font-size:20px; margin-bottom:4px;"></h2>
       <p id="detalhes-grupo-subtitulo" style="color:#8696a0; font-size:13px;"></p>
+      <p id="detalhes-grupo-descricao" class="hidden" style="color:#8696a0; font-size:13px; margin-top:10px; padding:0 10px;"></p>
     </div>
 
     <div style="display:flex; justify-content:center; gap:14px; padding:0 20px 20px;">
