@@ -457,6 +457,11 @@
       <div><div>Mensagens temporárias</div><div id="detalhes-grupo-temp-estado" style="color:#8696a0; font-size:12px;">Desativadas</div></div>
     </div>
 
+    <div class="chat-menu-item" onclick="abrirVisibilidadeFicheiros()" style="display:flex; align-items:center; gap:14px; padding:14px 20px;">
+      <span class="fa-solid fa-image" style="color:#8696a0; width:18px;"></span>
+      <div>Visibilidade dos ficheiros</div>
+    </div>
+
     <div class="chat-menu-item" onclick="abrirPermissoesGrupo()" style="display:flex; align-items:center; gap:14px; padding:14px 20px;">
       <span class="fa-solid fa-gear" style="color:#8696a0; width:18px;"></span>
       <div>Permissões do grupo</div>
@@ -632,6 +637,18 @@
         <span style="color:#111; font-size:14px;">Apagar mensagens com estrela</span>
       </label>
       <button id="btn-confirmar-limpar" onclick="confirmarLimparConversa()" style="width:100%; padding:13px; background:#fff; border:1px solid #f15c6d; color:#f15c6d; border-radius:24px; font-weight:bold; font-size:14px; cursor:pointer;">Limpar conversa</button>
+    </div>
+  </div>
+
+  <!-- Modal: Visibilidade dos ficheiros -->
+  <div id="visibilidade-ficheiros-modal" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:520; display:flex; align-items:center; justify-content:center; padding:24px;">
+    <div style="background:#fff; border-radius:12px; width:100%; max-width:340px; padding:22px 20px;">
+      <h3 style="color:#111; font-size:17px; margin-bottom:18px; line-height:1.35;">Mostrar ficheiros descarregados a partir desta conversa na galeria do dispositivo?</h3>
+      <div id="lista-visibilidade-ficheiros" style="margin-bottom:22px;"></div>
+      <div style="display:flex; justify-content:flex-end; gap:22px;">
+        <button onclick="fecharVisibilidadeFicheiros()" style="background:none; border:none; color:var(--whatsapp-teal); font-weight:bold; font-size:13px; cursor:pointer;">CANCELAR</button>
+        <button onclick="confirmarVisibilidadeFicheiros()" style="background:none; border:none; color:var(--whatsapp-teal); font-weight:bold; font-size:13px; cursor:pointer;">OK</button>
+      </div>
     </div>
   </div>
 

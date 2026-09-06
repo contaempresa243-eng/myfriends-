@@ -2185,6 +2185,8 @@ function processarNotificacaoRecebida(chatId, msg) {
   const myEmail = getCurrentUserEmail();
   if (!msg || msg.sender === myEmail) return;
 
+  salvarFicheiroNaGaleriaSeAtivo(chatId, msg);
+
   // Não incomoda se a pessoa já está a ver esta conversa neste momento
   const chatAberto = currentChatId === chatId && document.getElementById('chat-room-screen').style.display === 'flex';
   if (chatAberto) return;
@@ -2991,4 +2993,75 @@ function atualizarDetalhesTemporarias() {
   if (!el) return;
   const op = opcoesTemporarias.find((o) => o.segundos === chatTemporariasDuracaoAtual);
   el.innerText = op ? op.nome : 'Desativadas';
+}
+
+// ================= VISIBILIDADE DOS FICHEIROS (guardar imagens na galeria do dispositivo) =================
+// Preferência local por conversa, tal como no WhatsApp. Quando ativa em "Sim", as imagens
+// recebidas nessa conversa são automaticamente descarregadas (via download do navegador),
+// o que no Android normalmente as torna visíveis na galeria/Fotos do dispositivo.
+
+const opcoesVisibilidadeFicheiros = [
+  { id: 'predefinicao', nome: 'Predefinição (Não)' },
+  { id: 'sim', nome: 'Sim' },
+  { id: 'nao', nome: 'Não' }
+];
+
+let visibilidadeFicheirosSelecaoTemp = 'predefinicao';
+
+function abrirVisibilidadeFicheiros() {
+  fecharDetalhesGrupo();
+  const atual = window.localStorage.getItem('myfriens_visibilidade_ficheiros_' + currentChatId) || 'predefinicao';
+  visibilidadeFicheirosSelecaoTemp = atual;
+  renderizarVisibilidadeFicheiros();
+  document.getElementById('visibilidade-ficheiros-modal').classList.remove('hidden');
+}
+
+function renderizarVisibilidadeFicheiros() {
+  const lista = document.getElementById('lista-visibilidade-ficheiros');
+  if (!lista) return;
+  lista.innerHTML = '';
+
+  opcoesVisibilidadeFicheiros.forEach((op) => {
+    const marcado = op.id === visibilidadeFicheirosSelecaoTemp;
+    const item = document.createElement('div');
+    item.style.cssText = 'display:flex; align-items:center; gap:14px; padding:10px 0; cursor:pointer;';
+    item.innerHTML =
+      '<span class="fa-solid ' + (marcado ? 'fa-circle-dot' : 'fa-circle') + '" style="color:' + (marcado ? 'var(--whatsapp-teal)' : '#ccc') + '; font-size:18px;"></span>' +
+      '<span style="color:#111; font-size:15px;">' + op.nome + '</span>';
+    item.onclick = () => {
+      visibilidadeFicheirosSelecaoTemp = op.id;
+      renderizarVisibilidadeFicheiros();
+    };
+    lista.appendChild(item);
+  });
+}
+
+function fecharVisibilidadeFicheiros() {
+  document.getElementById('visibilidade-ficheiros-modal').classList.add('hidden');
+}
+
+function confirmarVisibilidadeFicheiros() {
+  window.localStorage.setItem('myfriens_visibilidade_ficheiros_' + currentChatId, visibilidadeFicheirosSelecaoTemp);
+  fecharVisibilidadeFicheiros();
+}
+
+// Descarrega automaticamente a imagem recebida, se a conversa tiver a visibilidade em "Sim"
+function salvarFicheiroNaGaleriaSeAtivo(chatId, msg) {
+  if (!msg || msg.type !== 'imagem' || !msg.url) return;
+
+  const opcao = window.localStorage.getItem('myfriens_visibilidade_ficheiros_' + chatId) || 'predefinicao';
+  if (opcao !== 'sim') return; // "Predefinição (Não)" e "Não" não guardam automaticamente
+
+  fetch(msg.url)
+    .then((res) => res.blob())
+    .then((blob) => {
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'myfriens_' + Date.now() + '.jpg';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+    })
+    .catch((err) => console.error('Erro ao guardar ficheiro na galeria:', err));
 }
