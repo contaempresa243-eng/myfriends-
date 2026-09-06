@@ -862,6 +862,11 @@ let chatApenasAdminsAtual = false;
 let chatAdminsAtual = [];
 let chatAvatarAtual = '';
 
+// Mensagens temporárias: duração ativa (em segundos) para o chat atualmente aberto
+let chatTemporariasDuracaoAtual = 0;
+let unsubscribeConfigChatTemporarias = null;
+let intervaloLimpezaTemporarias = null;
+
 function openChat(chatId, chatName, outroEmail, extra) {
   currentChatId = chatId;
   chatNameAtual = chatName;
@@ -881,6 +886,8 @@ function openChat(chatId, chatName, outroEmail, extra) {
 
   atualizarBotaoMicOuEnviar();
   loadMessages();
+  escutarConfigTemporariasChat();
+  iniciarLimpezaTemporarias();
 
   if (chamadaOutroEmail) {
     escutarChamadasRecebidas();
@@ -904,6 +911,8 @@ function closeChat() {
   fecharMediaModal();
   pararEscutaChamadasRecebidas();
   terminarChamadaLocal();
+  pararConfigTemporariasChat();
+  pararLimpezaTemporarias();
   chamadaOutroEmail = null;
 }
 
@@ -1012,6 +1021,14 @@ function construirMetaMensagem(msg, isMe, myEmail) {
   hora.style.cssText = 'font-size:10px; color:rgba(0,0,0,0.45);';
   meta.appendChild(hora);
 
+  if (msg.expiraEm) {
+    const relogio = document.createElement('span');
+    relogio.className = 'fa-solid fa-clock';
+    relogio.style.cssText = 'font-size:10px; color:rgba(0,0,0,0.45);';
+    relogio.title = 'Mensagem temporária';
+    meta.insertBefore(relogio, hora);
+  }
+
   if (isMe) {
     const lidoPor = msg.lidoPor || [];
     const foiLida = lidoPor.some((e) => e !== myEmail);
@@ -1043,6 +1060,9 @@ function loadMessages() {
       snapshot.forEach((doc) => {
         const msg = doc.data();
         if (msg.apagadoPara && msg.apagadoPara.includes(myEmail)) return; // apagada só para mim
+
+        // Mensagem temporária já expirada: não mostra (a limpeza automática vai removê-la a seguir)
+        if (msg.expiraEm && msg.expiraEm.toMillis && msg.expiraEm.toMillis() <= Date.now()) return;
 
         const id = doc.id;
         idsVisiveis.add(id);
@@ -1250,10 +1270,11 @@ function encaminharSelecionadas() {
       sender: myEmail,
       timestamp: firebase.firestore.FieldValue.serverTimestamp(),
       encaminhada: true
-    });
+    }, dadosExpiracaoAtual());
     delete nova.replyTo;
     delete nova.apagadoPara;
     delete nova.lidoPor;
+    if (chatTemporariasDuracaoAtual <= 0) delete nova.expiraEm;
     return db.collection('chats').doc(currentChatId).collection('messages').add(nova);
   });
 
@@ -1277,11 +1298,11 @@ function sendFirebaseMessage() {
     return;
   }
 
-  const dadosMensagem = {
+  const dadosMensagem = Object.assign({
     text: text,
     sender: myEmail,
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  };
+  }, dadosExpiracaoAtual());
   if (respostaAtual) {
     dadosMensagem.replyTo = { sender: respostaAtual.sender, preview: respostaAtual.preview };
   }
@@ -1727,13 +1748,13 @@ function enviarFicheiroParaChat(file, tipo) {
       if (!data.secure_url) {
         throw new Error((data.error && data.error.message) || 'Falha no upload');
       }
-      return db.collection('chats').doc(currentChatId).collection('messages').add({
+      return db.collection('chats').doc(currentChatId).collection('messages').add(Object.assign({
         type: tipo,
         url: data.secure_url,
         nomeFicheiro: file.name,
         sender: myEmail,
         timestamp: firebase.firestore.FieldValue.serverTimestamp()
-      });
+      }, dadosExpiracaoAtual()));
     })
     .catch((err) => {
       console.error('Erro ao enviar ficheiro:', err);
@@ -1770,13 +1791,13 @@ function enviarContactoParaChat(nome, telefone) {
   const myEmail = getCurrentUserEmail();
   if (!currentChatId) return;
 
-  db.collection('chats').doc(currentChatId).collection('messages').add({
+  db.collection('chats').doc(currentChatId).collection('messages').add(Object.assign({
     type: 'contacto',
     nomeContacto: nome,
     telefoneContacto: telefone,
     sender: myEmail,
     timestamp: firebase.firestore.FieldValue.serverTimestamp()
-  }).catch((err) => {
+  }, dadosExpiracaoAtual())).catch((err) => {
     console.error('Erro ao enviar contacto:', err);
     alert('Não foi possível enviar o contacto.');
   });
@@ -1803,6 +1824,7 @@ function abrirDetalhesGrupo() {
   document.getElementById('detalhes-grupo-nome').innerText = chatNameAtual;
   document.getElementById('group-details-screen').classList.remove('hidden');
   atualizarDetalhesNotificacao();
+  atualizarDetalhesTemporarias();
 
   db.collection('chats').doc(chatIdDetalhes).get().then((doc) => {
     const chat = doc.data() || {};
@@ -2441,7 +2463,6 @@ function acaoMenuChat(tipo) {
   const nomes = {
     'novo-grupo': 'Novo grupo',
     'ver-contato': 'Ver Contato',
-    'temporarias': 'Mensagens temporárias',
     'tema': 'Tema da conversa',
     'estrela': 'Marcar com estrelas',
     'nao-lida': 'Marcar como não lida',
@@ -2696,4 +2717,125 @@ function cancelarGravacao() {
     gravacaoCancelada = true;
     gravadorAtual.stop();
   }
+}
+
+// ================= MENSAGENS TEMPORÁRIAS (real, guardado no Firestore por chat) =================
+// A duração fica gravada no documento do chat (mensagensTemporariasDuracao, em segundos) e
+// aplica-se a TODOS os membros, tal como no WhatsApp. Sem servidor próprio, a limpeza das
+// mensagens expiradas acontece no cliente: sempre que alguém tem a conversa aberta, o dispositivo
+// verifica a cada 30s e apaga do Firestore o que já passou do prazo.
+
+const opcoesTemporarias = [
+  { segundos: 86400, nome: '24 horas' },
+  { segundos: 604800, nome: '7 dias' },
+  { segundos: 7776000, nome: '90 dias' },
+  { segundos: 0, nome: 'Desativadas' }
+];
+
+// Devolve os campos a juntar a uma nova mensagem, consoante a duração ativa no chat atual
+function dadosExpiracaoAtual() {
+  if (chatTemporariasDuracaoAtual > 0) {
+    return { expiraEm: firebase.firestore.Timestamp.fromMillis(Date.now() + chatTemporariasDuracaoAtual * 1000) };
+  }
+  return {};
+}
+
+// Mantém chatTemporariasDuracaoAtual sincronizado em tempo real (qualquer membro pode mudar a definição)
+function escutarConfigTemporariasChat() {
+  pararConfigTemporariasChat();
+  const chatIdAoEscutar = currentChatId;
+  unsubscribeConfigChatTemporarias = db.collection('chats').doc(chatIdAoEscutar).onSnapshot((doc) => {
+    chatTemporariasDuracaoAtual = (doc.exists && doc.data().mensagensTemporariasDuracao) || 0;
+    if (currentChatId === chatIdAoEscutar) atualizarDetalhesTemporarias();
+  }, (err) => console.error('Erro ao escutar configuração de mensagens temporárias:', err));
+}
+
+function pararConfigTemporariasChat() {
+  if (unsubscribeConfigChatTemporarias) { unsubscribeConfigChatTemporarias(); unsubscribeConfigChatTemporarias = null; }
+  chatTemporariasDuracaoAtual = 0;
+}
+
+// Verifica e apaga mensagens já expiradas desta conversa (roda enquanto o chat está aberto)
+function iniciarLimpezaTemporarias() {
+  pararLimpezaTemporarias();
+  limparMensagensExpiradas();
+  intervaloLimpezaTemporarias = setInterval(limparMensagensExpiradas, 30000);
+}
+
+function pararLimpezaTemporarias() {
+  if (intervaloLimpezaTemporarias) { clearInterval(intervaloLimpezaTemporarias); intervaloLimpezaTemporarias = null; }
+}
+
+function limparMensagensExpiradas() {
+  const chatIdAlvo = currentChatId;
+  if (!chatIdAlvo) return;
+
+  db.collection('chats').doc(chatIdAlvo).collection('messages')
+    .where('expiraEm', '<=', firebase.firestore.Timestamp.fromMillis(Date.now()))
+    .get()
+    .then((snapshot) => {
+      if (snapshot.empty) return;
+      const lote = db.batch();
+      snapshot.forEach((doc) => lote.delete(doc.ref));
+      return lote.commit();
+    })
+    .catch((err) => console.error('Erro ao limpar mensagens temporárias:', err));
+}
+
+// Abre o ecrã "Mensagens temporárias" (a partir dos Detalhes do grupo)
+function abrirMensagensTemporarias() {
+  fecharDetalhesGrupo();
+  document.getElementById('temp-messages-screen').classList.remove('hidden');
+
+  const chatIdASair = currentChatId;
+  renderizarOpcoesTemporarias(chatTemporariasDuracaoAtual);
+
+  db.collection('chats').doc(chatIdASair).get().then((doc) => {
+    if (currentChatId !== chatIdASair) return;
+    const duracaoAtual = (doc.exists && doc.data().mensagensTemporariasDuracao) || 0;
+    renderizarOpcoesTemporarias(duracaoAtual);
+  }).catch((err) => console.error('Erro ao carregar mensagens temporárias:', err));
+}
+
+function fecharMensagensTemporarias() {
+  document.getElementById('temp-messages-screen').classList.add('hidden');
+}
+
+function renderizarOpcoesTemporarias(duracaoAtual) {
+  const lista = document.getElementById('lista-duracao-temporarias');
+  if (!lista) return;
+  lista.innerHTML = '';
+
+  opcoesTemporarias.forEach((op) => {
+    const marcado = op.segundos === duracaoAtual;
+    const item = document.createElement('div');
+    item.style.cssText = 'display:flex; align-items:center; gap:16px; padding:14px 24px; cursor:pointer;';
+    item.innerHTML =
+      '<span class="fa-solid ' + (marcado ? 'fa-circle-dot' : 'fa-circle') + '" style="color:' + (marcado ? 'var(--whatsapp-teal)' : '#ccc') + '; font-size:19px;"></span>' +
+      '<span style="color:#111; font-size:16px;">' + op.nome + '</span>';
+    item.onclick = () => selecionarDuracaoTemporarias(op.segundos);
+    lista.appendChild(item);
+  });
+}
+
+function selecionarDuracaoTemporarias(segundos) {
+  const chatIdASalvar = currentChatId;
+  if (!chatIdASalvar) return;
+
+  db.collection('chats').doc(chatIdASalvar).set({ mensagensTemporariasDuracao: segundos }, { merge: true })
+    .then(() => {
+      renderizarOpcoesTemporarias(segundos);
+      mostrarToast(segundos === 0 ? 'Mensagens temporárias desativadas' : 'Mensagens temporárias ativadas');
+    })
+    .catch((err) => {
+      console.error('Erro ao guardar mensagens temporárias:', err);
+      mostrarToast('Não foi possível guardar. Tenta novamente.');
+    });
+}
+
+function atualizarDetalhesTemporarias() {
+  const el = document.getElementById('detalhes-grupo-temp-estado');
+  if (!el) return;
+  const op = opcoesTemporarias.find((o) => o.segundos === chatTemporariasDuracaoAtual);
+  el.innerText = op ? op.nome : 'Desativadas';
 }
