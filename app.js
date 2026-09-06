@@ -1863,8 +1863,10 @@ function abrirDetalhesGrupo() {
     });
 
     const cardComunidade = document.getElementById('detalhes-grupo-comunidade-card');
+    const itemRemoverComunidade = document.getElementById('detalhes-grupo-remover-comunidade-item');
     if (chat.comunidadeId) {
       cardComunidade.classList.remove('hidden');
+      if (itemRemoverComunidade) itemRemoverComunidade.classList.remove('hidden');
       db.collection('comunidades').doc(chat.comunidadeId).get().then((comDoc) => {
         const com = comDoc.data() || {};
         document.getElementById('detalhes-grupo-comunidade-nome').innerText = com.nome || 'Comunidade';
@@ -1874,6 +1876,7 @@ function abrirDetalhesGrupo() {
       });
     } else {
       cardComunidade.classList.add('hidden');
+      if (itemRemoverComunidade) itemRemoverComunidade.classList.add('hidden');
     }
   }).catch((err) => console.error('Erro ao carregar detalhes do grupo:', err));
 }
@@ -2229,16 +2232,6 @@ function voltarParaComunidadeDeDetalhes() {
   });
 }
 
-function removerDaComunidadeDetalhes() {
-  fecharDetalhesGrupo();
-  mostrarToast('Remover da comunidade — em breve');
-}
-
-function sairDoGrupoDetalhes() {
-  fecharDetalhesGrupo();
-  sairDoGrupo();
-}
-
 function exportarConversas() {
   fecharChatMenuMais();
   mostrarToast('Exportar conversas — em breve');
@@ -2289,23 +2282,50 @@ function fecharMembrosModal() {
   document.getElementById('membros-modal').classList.add('hidden');
 }
 
-function sairDoGrupo() {
+function abrirSairGrupoModal() {
   fecharChatMenu();
-  if (!window.confirm('Sair de "' + chatNameAtual + '"? Deixarás de ver as mensagens deste grupo.')) return;
+  fecharChatMenuMais();
+  fecharDetalhesGrupo();
+  document.getElementById('sair-grupo-titulo').innerText = 'Sair do grupo: "' + chatNameAtual + '"?';
+  document.getElementById('sair-grupo-denunciar-check').checked = false;
+  document.getElementById('sair-grupo-modal').classList.remove('hidden');
+}
 
+function fecharSairGrupoModal() {
+  document.getElementById('sair-grupo-modal').classList.add('hidden');
+}
+
+function confirmarSairGrupo(eliminarParaMim) {
+  const denunciar = document.getElementById('sair-grupo-denunciar-check').checked;
   const email = getCurrentUserEmail();
   const chatIdASair = currentChatId;
 
-  db.collection('chats').doc(chatIdASair).update({
-    participantes: firebase.firestore.FieldValue.arrayRemove(email)
-  }).then(() => {
-    if (chatIdASair === 'geral') {
-      return db.collection('usuarios').doc(email).set({ saiuDoGrupoGeral: true }, { merge: true });
-    }
-  }).then(() => closeChat())
+  const denunciaPromise = denunciar ? registarDenunciaGrupo() : Promise.resolve();
+
+  denunciaPromise
+    .then(() => db.collection('chats').doc(chatIdASair).update({
+      participantes: firebase.firestore.FieldValue.arrayRemove(email)
+    }))
+    .then(() => {
+      if (chatIdASair === 'geral') {
+        return db.collection('usuarios').doc(email).set({ saiuDoGrupoGeral: true }, { merge: true });
+      }
+    })
+    .then(() => {
+      if (!eliminarParaMim) return null;
+      return db.collection('chats').doc(chatIdASair).collection('messages').get().then((snapshot) => {
+        const lote = db.batch();
+        snapshot.forEach((doc) => lote.update(doc.ref, { apagadoPara: firebase.firestore.FieldValue.arrayUnion(email) }));
+        return lote.commit();
+      });
+    })
+    .then(() => {
+      fecharSairGrupoModal();
+      closeChat();
+    })
     .catch((err) => {
       console.error('Erro ao sair do grupo:', err);
-      alert('Não foi possível sair do grupo.');
+      mostrarToast('Não foi possível sair do grupo.');
     });
 }
 
@@ -2471,11 +2491,6 @@ function acaoMenuChat(tipo) {
   mostrarToast((nomes[tipo] || 'Função') + ' — em breve');
 }
 
-function denunciarConversa() {
-  fecharChatMenuMais();
-  mostrarToast('Denunciar — em breve');
-}
-
 function bloquearConversa() {
   fecharChatMenuMais();
   mostrarToast('Bloquear — em breve');
@@ -2618,23 +2633,161 @@ function fecharMediaModal() {
 }
 
 // ---- Limpar conversa (apaga todas as mensagens só para mim) ----
-function limparConversa() {
-  fecharChatMenuMais();
-  if (!window.confirm('Limpar todas as mensagens desta conversa? Isto só afeta o teu dispositivo.')) return;
+// Formata um tamanho em bytes para o formato "0,2 kB" (vírgula decimal, como no WhatsApp em português)
+function formatarTamanhoKB(bytes) {
+  const kb = bytes / 1024;
+  return kb.toFixed(1).replace('.', ',') + ' kB';
+}
 
+function abrirLimparConversaModal() {
+  fecharChatMenuMais();
+  fecharDetalhesGrupo();
+  const chatIdAlvo = currentChatId;
+  document.getElementById('limpar-estrela-check').checked = false;
+  const btn = document.getElementById('btn-confirmar-limpar');
+  btn.innerText = 'Limpar conversa';
+  document.getElementById('limpar-conversa-modal').classList.remove('hidden');
+
+  db.collection('chats').doc(chatIdAlvo).collection('messages').get().then((snapshot) => {
+    if (currentChatId !== chatIdAlvo) return;
+    let totalBytes = 0;
+    snapshot.forEach((doc) => { totalBytes += JSON.stringify(doc.data()).length; });
+    btn.innerText = 'Limpar conversa (' + formatarTamanhoKB(totalBytes) + ')';
+  }).catch((err) => console.error('Erro ao calcular tamanho da conversa:', err));
+}
+
+function fecharLimparConversaModal() {
+  document.getElementById('limpar-conversa-modal').classList.add('hidden');
+}
+
+function confirmarLimparConversa() {
+  const apagarComEstrela = document.getElementById('limpar-estrela-check').checked;
   const email = getCurrentUserEmail();
-  db.collection('chats').doc(currentChatId).collection('messages').get()
+  const chatIdAlvo = currentChatId;
+
+  db.collection('chats').doc(chatIdAlvo).collection('messages').get()
     .then((snapshot) => {
       const lote = db.batch();
       snapshot.forEach((doc) => {
+        const msg = doc.data();
+        if (!apagarComEstrela && msg.favorita) return; // mantém as marcadas com estrela, se a caixa não estiver marcada
         lote.update(doc.ref, { apagadoPara: firebase.firestore.FieldValue.arrayUnion(email) });
       });
       return lote.commit();
     })
+    .then(() => {
+      fecharLimparConversaModal();
+      mostrarToast('Conversa limpa');
+    })
     .catch((err) => {
       console.error('Erro ao limpar conversa:', err);
-      alert('Não foi possível limpar a conversa.');
+      mostrarToast('Não foi possível limpar a conversa.');
     });
+}
+
+// ================= DENUNCIAR GRUPO / REMOVER DA COMUNIDADE =================
+function abrirDenunciarGrupoModal() {
+  fecharChatMenuMais();
+  fecharDetalhesGrupo();
+  document.getElementById('denunciar-sair-check').checked = true;
+  document.getElementById('denunciar-grupo-modal').classList.remove('hidden');
+}
+
+function fecharDenunciarGrupoModal() {
+  document.getElementById('denunciar-grupo-modal').classList.add('hidden');
+}
+
+// Regista a denúncia no Firestore com as últimas 5 mensagens, para revisão manual
+// (não existe um sistema de moderação em tempo real, mas a denúncia fica guardada de verdade)
+function registarDenunciaGrupo() {
+  const myEmail = getCurrentUserEmail();
+  const chatIdAlvo = currentChatId;
+  const nomeAlvo = chatNameAtual;
+
+  return db.collection('chats').doc(chatIdAlvo).collection('messages')
+    .orderBy('timestamp', 'desc')
+    .limit(5)
+    .get()
+    .then((snapshot) => {
+      const mensagens = snapshot.docs.map((doc) => {
+        const msg = doc.data();
+        return { sender: msg.sender || '', preview: previaMensagem(msg) };
+      });
+      return db.collection('denuncias').add({
+        grupoId: chatIdAlvo,
+        grupoNome: nomeAlvo,
+        denunciadoPor: myEmail,
+        mensagens: mensagens,
+        criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+      });
+    });
+}
+
+function confirmarDenunciarGrupo() {
+  const tambemSair = document.getElementById('denunciar-sair-check').checked;
+  const email = getCurrentUserEmail();
+  const chatIdAlvo = currentChatId;
+
+  registarDenunciaGrupo()
+    .then(() => {
+      if (!tambemSair) return null;
+      return db.collection('chats').doc(chatIdAlvo).update({
+        participantes: firebase.firestore.FieldValue.arrayRemove(email)
+      }).then(() => db.collection('chats').doc(chatIdAlvo).collection('messages').get())
+        .then((snapshot) => {
+          const lote = db.batch();
+          snapshot.forEach((doc) => lote.update(doc.ref, { apagadoPara: firebase.firestore.FieldValue.arrayUnion(email) }));
+          return lote.commit();
+        });
+    })
+    .then(() => {
+      fecharDenunciarGrupoModal();
+      mostrarToast('Grupo denunciado');
+      if (tambemSair) closeChat();
+    })
+    .catch((err) => {
+      console.error('Erro ao denunciar grupo:', err);
+      mostrarToast('Não foi possível denunciar o grupo.');
+    });
+}
+
+function abrirRemoverComunidadeModal() {
+  fecharDetalhesGrupo();
+  if (!comunidadeIdAtual) {
+    mostrarToast('Este grupo não pertence a nenhuma comunidade.');
+    return;
+  }
+  document.getElementById('remover-comunidade-texto').innerText = 'Pode remover o grupo "' + chatNameAtual + '" da comunidade.';
+  document.getElementById('remover-comunidade-modal').classList.remove('hidden');
+}
+
+function fecharRemoverComunidadeModal() {
+  document.getElementById('remover-comunidade-modal').classList.add('hidden');
+}
+
+function confirmarRemoverComunidade() {
+  const myEmail = getCurrentUserEmail();
+  const chatIdAlvo = currentChatId;
+  const comunidadeIdAlvo = comunidadeIdAtual;
+
+  db.collection('comunidades').doc(comunidadeIdAlvo).get().then((doc) => {
+    const admins = (doc.exists && doc.data().admins) || [];
+    if (!admins.includes(myEmail)) {
+      fecharRemoverComunidadeModal();
+      mostrarToast('Só administradores da comunidade podem remover este grupo.');
+      return;
+    }
+    return db.collection('chats').doc(chatIdAlvo).update({
+      comunidadeId: firebase.firestore.FieldValue.delete()
+    }).then(() => {
+      fecharRemoverComunidadeModal();
+      mostrarToast('Grupo removido da comunidade');
+      closeChat();
+    });
+  }).catch((err) => {
+    console.error('Erro ao remover grupo da comunidade:', err);
+    mostrarToast('Não foi possível remover o grupo da comunidade.');
+  });
 }
 
 // Gravação de áudio (mensagem de voz)

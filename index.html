@@ -234,7 +234,7 @@
         <div class="chat-menu-item" onclick="abrirDetalhesGrupo()">Detalhes do grupo</div>
         <div class="chat-menu-item" onclick="abrirFicheirosLigacoes()">Ficheiros do grupo</div>
         <div class="chat-menu-item" id="item-notificacao" onclick="toggleNotificacao()">Desativar notificações</div>
-        <div class="chat-menu-item" onclick="acaoMenuChat('temporarias')">Mensagens temporárias</div>
+        <div class="chat-menu-item" onclick="abrirMensagensTemporarias()">Mensagens temporárias</div>
         <div class="chat-menu-item" onclick="acaoMenuChat('tema')">Tema da conversa</div>
         <div class="chat-menu-item" onclick="toggleChatMenuMais(event)" style="display:flex; justify-content:space-between; align-items:center;">
           Mais <span class="fa-solid fa-chevron-right" style="font-size:11px; color:#8696a0;"></span>
@@ -243,12 +243,12 @@
 
       <!-- Submenu "Mais" -->
       <div id="chat-menu-mais" class="hidden" style="position:absolute; top:52px; right:10px; background:var(--whatsapp-panel); border:1px solid #2a3942; border-radius:8px; box-shadow:0 4px 15px rgba(0,0,0,0.4); z-index:250; width:210px; overflow:hidden;">
-        <div class="chat-menu-item" onclick="limparConversa()">Limpar conversa</div>
+        <div class="chat-menu-item" onclick="abrirLimparConversaModal()">Limpar conversa</div>
         <div class="chat-menu-item" onclick="exportarConversas()">Exportar conversas</div>
         <div class="chat-menu-item" onclick="adicionarAtalho()">Adicionar atalho</div>
         <div class="chat-menu-item" onclick="adicionarLista()">Adicionar a lista</div>
-        <div class="chat-menu-item" style="color:#f15c6d;" onclick="denunciarConversa()">Denunciar</div>
-        <div class="chat-menu-item" style="color:#f15c6d;" onclick="sairDoGrupo()">Sair do grupo</div>
+        <div class="chat-menu-item" style="color:#f15c6d;" onclick="abrirDenunciarGrupoModal()">Denunciar</div>
+        <div class="chat-menu-item" style="color:#f15c6d;" onclick="abrirSairGrupoModal()">Sair do grupo</div>
       </div>
 
       <!-- Modal: Membros do grupo -->
@@ -469,10 +469,10 @@
 
     <div class="chat-menu-item" onclick="acaoMenuChat('favoritos')" style="padding:14px 20px;">Adicionar aos favoritos</div>
     <div class="chat-menu-item" onclick="adicionarLista()" style="padding:14px 20px;">Adicionar à lista</div>
-    <div class="chat-menu-item" onclick="limparConversa()" style="padding:14px 20px;">Limpar conversa</div>
-    <div class="chat-menu-item" style="color:#f15c6d; padding:14px 20px;" onclick="removerDaComunidadeDetalhes()">Remover da comunidade</div>
-    <div class="chat-menu-item" style="color:#f15c6d; padding:14px 20px;" onclick="sairDoGrupoDetalhes()">Sair do grupo</div>
-    <div class="chat-menu-item" style="color:#f15c6d; padding:14px 20px;" onclick="denunciarConversa()">Denunciar grupo</div>
+    <div class="chat-menu-item" onclick="abrirLimparConversaModal()" style="padding:14px 20px;">Limpar conversa</div>
+    <div id="detalhes-grupo-remover-comunidade-item" class="chat-menu-item hidden" style="color:#f15c6d; padding:14px 20px;" onclick="abrirRemoverComunidadeModal()">Remover da comunidade</div>
+    <div class="chat-menu-item" style="color:#f15c6d; padding:14px 20px;" onclick="abrirSairGrupoModal()">Sair do grupo</div>
+    <div class="chat-menu-item" style="color:#f15c6d; padding:14px 20px;" onclick="abrirDenunciarGrupoModal()">Denunciar grupo</div>
   </div>
 
   <!-- Ecrã de Permissões do grupo -->
@@ -569,6 +569,70 @@
 
     <p style="padding:16px 24px 4px; color:#667781; font-size:14px; font-weight:bold;">Duração das mensagens</p>
     <div id="lista-duracao-temporarias"></div>
+  </div>
+
+  <!-- Modal: Sair do grupo -->
+  <div id="sair-grupo-modal" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:520; display:flex; align-items:center; justify-content:center; padding:24px;">
+    <div style="background:#fff; border-radius:12px; width:100%; max-width:340px; padding:22px 20px;">
+      <h3 id="sair-grupo-titulo" style="color:#111; font-size:17px; margin-bottom:14px; line-height:1.3;">Sair do grupo</h3>
+      <p style="color:#3b4a54; font-size:13px; line-height:1.5; margin-bottom:18px;">Só os administradores são notificados quando sai de um grupo.</p>
+      <label style="display:flex; align-items:flex-start; gap:10px; cursor:pointer; margin-bottom:22px;">
+        <input type="checkbox" id="sair-grupo-denunciar-check" style="margin-top:3px;">
+        <span>
+          <div style="color:#111; font-size:14px; font-weight:bold;">Denunciar grupo</div>
+          <div style="color:#667781; font-size:12px; line-height:1.4;">As últimas 5 mensagens desta conversa vão ser copiadas para revisão. Ninguém no grupo vai ter conhecimento desta denúncia.</div>
+        </span>
+      </label>
+      <div style="display:flex; flex-direction:column; align-items:flex-end; gap:2px;">
+        <button onclick="confirmarSairGrupo(false)" style="background:none; border:none; color:var(--whatsapp-teal); font-weight:bold; font-size:13px; padding:10px 4px; cursor:pointer;">SAIR DO GRUPO</button>
+        <button onclick="fecharSairGrupoModal()" style="background:none; border:none; color:var(--whatsapp-teal); font-weight:bold; font-size:13px; padding:10px 4px; cursor:pointer;">CANCELAR</button>
+        <button onclick="confirmarSairGrupo(true)" style="background:none; border:none; color:#f15c6d; font-weight:bold; font-size:13px; padding:10px 4px; cursor:pointer;">SAIR E ELIMINAR PARA MIM</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Denunciar grupo -->
+  <div id="denunciar-grupo-modal" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:520; display:flex; align-items:center; justify-content:center; padding:24px;">
+    <div style="background:#fff; border-radius:12px; width:100%; max-width:340px; padding:22px 20px;">
+      <h3 style="color:#111; font-size:18px; margin-bottom:14px; text-align:center;">Denunciar este grupo?</h3>
+      <p style="color:#3b4a54; font-size:13px; line-height:1.5; margin-bottom:18px;">As 5 mensagens mais recentes deste grupo vão ser copiadas para revisão. Nenhum participante do grupo será notificado.</p>
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:22px;">
+        <input type="checkbox" id="denunciar-sair-check" checked>
+        <span style="color:#111; font-size:14px;">Sair do grupo e eliminar conversa</span>
+      </label>
+      <div style="display:flex; justify-content:flex-end; gap:22px;">
+        <button onclick="fecharDenunciarGrupoModal()" style="background:none; border:none; color:var(--whatsapp-teal); font-weight:bold; font-size:13px; cursor:pointer;">CANCELAR</button>
+        <button onclick="confirmarDenunciarGrupo()" style="background:none; border:none; color:var(--whatsapp-teal); font-weight:bold; font-size:13px; cursor:pointer;">DENUNCIAR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Remover grupo da comunidade -->
+  <div id="remover-comunidade-modal" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:520; display:flex; align-items:center; justify-content:center; padding:24px;">
+    <div style="background:#fff; border-radius:12px; width:100%; max-width:340px; padding:22px 20px;">
+      <h3 style="color:#111; font-size:18px; margin-bottom:10px;">Remover grupo da comunidade?</h3>
+      <p id="remover-comunidade-texto" style="color:#667781; font-size:13px; line-height:1.5; margin-bottom:22px;">Pode remover este grupo da comunidade.</p>
+      <div style="display:flex; justify-content:flex-end; gap:22px;">
+        <button onclick="fecharRemoverComunidadeModal()" style="background:none; border:none; color:var(--whatsapp-teal); font-weight:bold; font-size:13px; cursor:pointer;">CANCELAR</button>
+        <button onclick="confirmarRemoverComunidade()" style="background:none; border:none; color:var(--whatsapp-teal); font-weight:bold; font-size:13px; cursor:pointer;">REMOVER</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal (bottom sheet): Limpar conversa -->
+  <div id="limpar-conversa-modal" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:520; display:flex; align-items:flex-end;">
+    <div style="background:#fff; border-radius:16px 16px 0 0; width:100%; padding:20px 20px 28px;">
+      <div style="display:flex; align-items:center; gap:16px; margin-bottom:16px;">
+        <span class="fa-solid fa-xmark" onclick="fecharLimparConversaModal()" style="color:#111; font-size:18px; cursor:pointer;"></span>
+        <h3 style="color:#111; font-size:18px;">Limpar conversa</h3>
+      </div>
+      <p style="color:#3b4a54; font-size:13px; line-height:1.5; margin-bottom:16px;">Todas as mensagens nesta conversa vão ser eliminadas. Esta ação não pode ser anulada.</p>
+      <label style="display:flex; align-items:center; gap:10px; cursor:pointer; margin-bottom:20px; border-top:1px solid #eee; padding-top:16px;">
+        <input type="checkbox" id="limpar-estrela-check">
+        <span style="color:#111; font-size:14px;">Apagar mensagens com estrela</span>
+      </label>
+      <button id="btn-confirmar-limpar" onclick="confirmarLimparConversa()" style="width:100%; padding:13px; background:#fff; border:1px solid #f15c6d; color:#f15c6d; border-radius:24px; font-weight:bold; font-size:14px; cursor:pointer;">Limpar conversa</button>
+    </div>
   </div>
 
   <!-- Modal: Notificar (Todas / Destaques) -->
