@@ -909,6 +909,7 @@ function closeChat() {
   cancelarResposta();
   fecharChatMenu();
   fecharChatMenuMais();
+  fecharGroupCallMenu();
   fecharPesquisaMensagens();
   fecharMediaModal();
   pararEscutaChamadasRecebidas();
@@ -924,6 +925,11 @@ function renderHeaderNormal() {
     ? '<img src="' + chatFotoAtual + '" style="width:35px; height:35px; border-radius:50%; object-fit:cover; margin-right:10px; flex-shrink:0;">'
     : '<div class="avatar" style="width:35px; height:35px; font-size:14px; margin-right:10px; flex-shrink:0;">' + chatAvatarAtual + '</div>';
 
+  const iconesChamada = chatTipoAtual === '1v1'
+    ? '<span class="fa-solid fa-video" onclick="startVideoCall()" style="margin-right:15px;"></span>' +
+      '<span class="fa-solid fa-phone" onclick="startVoiceCall()" style="margin-right:15px;"></span>'
+    : '<span class="fa-solid fa-video" onclick="toggleGroupCallMenu(event)" style="margin-right:15px;"></span>';
+
   document.getElementById('chat-header').innerHTML =
     '<div style="display:flex; align-items:center; flex:1; min-width:0;">' +
       '<span class="fa-solid fa-arrow-left" onclick="closeChat()" style="margin-right:15px; cursor:pointer; color:#aebac1; flex-shrink:0;"></span>' +
@@ -933,8 +939,7 @@ function renderHeaderNormal() {
       '</div>' +
     '</div>' +
     '<div class="header-icons" style="display:flex; align-items:center; flex-shrink:0;">' +
-      '<span class="fa-solid fa-video" onclick="startVideoCall()" style="margin-right:15px;"></span>' +
-      '<span class="fa-solid fa-phone" onclick="startVoiceCall()" style="margin-right:15px;"></span>' +
+      iconesChamada +
       '<span class="fa-solid fa-ellipsis-vertical" onclick="toggleChatMenu()"></span>' +
     '</div>';
 }
@@ -996,9 +1001,48 @@ function construirConteudoMensagem(msg) {
     return audio;
   }
 
+  if (msg.type === 'chamada_link') {
+    const card = document.createElement('div');
+    card.style.cssText = 'display:flex; align-items:center; gap:10px; min-width:190px; cursor:pointer;';
+    card.innerHTML =
+      '<div style="width:38px; height:38px; border-radius:50%; background:#00a884; display:flex; align-items:center; justify-content:center; flex-shrink:0;">' +
+        '<i class="fa-solid ' + (msg.tipoChamada === 'voz' ? 'fa-phone' : 'fa-video') + '" style="color:#fff; font-size:15px;"></i>' +
+      '</div>' +
+      '<div><div style="font-weight:bold; color:#111;">Ligação para ' + (msg.tipoChamada === 'voz' ? 'chamada de voz' : 'videochamada') + '</div>' +
+      '<div style="font-size:12px; color:#3b4a54;">Toca para participar</div></div>';
+    card.onclick = () => {
+      if (mensagensSelecionadas.size > 0) return;
+      participarLigacaoChamada(msg.callId, msg.tipoChamada);
+    };
+    return card;
+  }
+
+  if (msg.type === 'chamada_agendada') {
+    const card = document.createElement('div');
+    card.style.cssText = 'display:flex; align-items:center; gap:10px; min-width:190px;';
+    const dataFormatada = msg.inicio && msg.inicio.toDate ? formatarDataHora(msg.inicio.toDate()) : '';
+    card.innerHTML =
+      '<div style="width:38px; height:38px; border-radius:50%; background:#667781; display:flex; align-items:center; justify-content:center; flex-shrink:0;">' +
+        '<i class="fa-solid fa-calendar-days" style="color:#fff; font-size:15px;"></i>' +
+      '</div>' +
+      '<div><div style="font-weight:bold; color:#111;">' + (msg.titulo || 'Chamada agendada') + '</div>' +
+      '<div style="font-size:12px; color:#3b4a54;">' + dataFormatada + ' · ' + (msg.tipoChamada === 'voz' ? 'Voz' : 'Vídeo') + '</div></div>';
+    return card;
+  }
+
   const span = document.createElement('span');
   span.innerText = msg.text || '';
   return span;
+}
+
+// Formata uma data para "dd/mm/aaaa às HH:MM"
+function formatarDataHora(d) {
+  const dia = String(d.getDate()).padStart(2, '0');
+  const mes = String(d.getMonth() + 1).padStart(2, '0');
+  const ano = d.getFullYear();
+  const h = String(d.getHours()).padStart(2, '0');
+  const m = String(d.getMinutes()).padStart(2, '0');
+  return dia + '/' + mes + '/' + ano + ' às ' + h + ':' + m;
 }
 
 // Prévia curta de uma mensagem (usada em respostas e reencaminhamento)
@@ -1007,6 +1051,8 @@ function previaMensagem(msg) {
   if (msg.type === 'audio') return '🎤 Áudio';
   if (msg.type === 'documento') return '📄 ' + (msg.nomeFicheiro || 'Documento');
   if (msg.type === 'contacto') return '👤 ' + (msg.nomeContacto || 'Contacto');
+  if (msg.type === 'chamada_link') return '📞 Ligação para ' + (msg.tipoChamada === 'voz' ? 'chamada de voz' : 'videochamada');
+  if (msg.type === 'chamada_agendada') return '📅 ' + (msg.titulo || 'Chamada agendada');
   return msg.text || '';
 }
 
@@ -1821,6 +1867,7 @@ if ('serviceWorker' in navigator) {
 // ---- Menu do cabeçalho (3 pontos) ----
 function toggleChatMenu() {
   fecharChatMenuMais();
+  fecharGroupCallMenu();
   document.getElementById('chat-menu').classList.toggle('hidden');
   atualizarTextoNotificacao();
 }
@@ -2931,7 +2978,11 @@ function pararConfigTemporariasChat() {
 function iniciarLimpezaTemporarias() {
   pararLimpezaTemporarias();
   limparMensagensExpiradas();
-  intervaloLimpezaTemporarias = setInterval(limparMensagensExpiradas, 30000);
+  verificarLembretesAgendados();
+  intervaloLimpezaTemporarias = setInterval(() => {
+    limparMensagensExpiradas();
+    verificarLembretesAgendados();
+  }, 30000);
 }
 
 function pararLimpezaTemporarias() {
@@ -3081,4 +3132,539 @@ function salvarFicheiroNaGaleriaSeAtivo(chatId, msg) {
       setTimeout(() => URL.revokeObjectURL(link.href), 5000);
     })
     .catch((err) => console.error('Erro ao guardar ficheiro na galeria:', err));
+}
+
+// ================= MENU DE OPÇÕES DE CHAMADA (grupo) =================
+// Em conversas de grupo, o botão de vídeo do cabeçalho abre este menu com as opções
+// de chamada, em vez de iniciar logo uma chamada (que ainda só funciona 1-para-1).
+
+function toggleGroupCallMenu(event) {
+  if (event) event.stopPropagation();
+  fecharChatMenu();
+  document.getElementById('group-call-menu').classList.toggle('hidden');
+}
+
+function fecharGroupCallMenu() {
+  const el = document.getElementById('group-call-menu');
+  if (el) el.classList.add('hidden');
+}
+
+function acaoChamadaGrupo(tipo) {
+  fecharGroupCallMenu();
+  if (tipo === 'link') { abrirEnviarLigacaoModal(); return; }
+  if (tipo === 'agendar') { abrirAgendarChamada(); return; }
+  if (tipo === 'voz' || tipo === 'video') { iniciarNovaChamadaGrupo(tipo); return; }
+  mostrarToast('Função — em breve');
+}
+
+// Cria uma nova chamada de grupo (fica visível na conversa para os outros entrarem) e entra logo nela
+function iniciarNovaChamadaGrupo(tipo) {
+  const chatIdAlvo = currentChatId;
+  const myEmail = getCurrentUserEmail();
+  const callId = 'call_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+
+  db.collection('chats').doc(chatIdAlvo).collection('chamadas_grupo').doc(callId).set({
+    tipo: tipo,
+    exigirAprovacao: false,
+    criadoPor: myEmail,
+    criadoEm: firebase.firestore.FieldValue.serverTimestamp(),
+    participantes: []
+  }).then(() => db.collection('chats').doc(chatIdAlvo).collection('messages').add(Object.assign({
+    type: 'chamada_link',
+    tipoChamada: tipo,
+    callId: callId,
+    exigirAprovacao: false,
+    url: window.location.origin + window.location.pathname + '#chamada=' + chatIdAlvo + '_' + callId,
+    sender: myEmail,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  }, dadosExpiracaoAtual())))
+    .then(() => entrarChamadaGrupo(chatIdAlvo, callId, tipo))
+    .catch((err) => {
+      console.error('Erro ao iniciar chamada de grupo:', err);
+      mostrarToast('Não foi possível iniciar a chamada.');
+    });
+}
+
+// Fecha o menu de chamada de grupo ao tocar fora dele
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('group-call-menu');
+  if (!menu || menu.classList.contains('hidden')) return;
+  const dentroDoMenu = menu.contains(e.target);
+  const noBotao = e.target.classList && e.target.classList.contains('fa-video');
+  if (!dentroDoMenu && !noBotao) fecharGroupCallMenu();
+});
+
+// ================= ENVIAR LIGAÇÃO PARA CHAMADA =================
+let enviarLigacaoTipoAtual = 'video';
+
+function abrirEnviarLigacaoModal() {
+  enviarLigacaoTipoAtual = 'video';
+  document.getElementById('enviar-ligacao-aprovacao').checked = false;
+  atualizarLabelEnviarLigacao();
+  document.getElementById('enviar-ligacao-modal').classList.remove('hidden');
+}
+
+function fecharEnviarLigacaoModal() {
+  document.getElementById('enviar-ligacao-modal').classList.add('hidden');
+}
+
+function alternarTipoEnviarLigacao() {
+  enviarLigacaoTipoAtual = enviarLigacaoTipoAtual === 'video' ? 'voz' : 'video';
+  atualizarLabelEnviarLigacao();
+}
+
+function atualizarLabelEnviarLigacao() {
+  document.getElementById('enviar-ligacao-icone').className = 'fa-solid ' + (enviarLigacaoTipoAtual === 'voz' ? 'fa-phone' : 'fa-video');
+  document.getElementById('enviar-ligacao-label').innerText = enviarLigacaoTipoAtual === 'voz' ? 'Chamada de voz' : 'Videochamada';
+}
+
+function confirmarEnviarLigacao() {
+  const chatIdAlvo = currentChatId;
+  const myEmail = getCurrentUserEmail();
+  const tipo = enviarLigacaoTipoAtual;
+  const exigirAprovacao = document.getElementById('enviar-ligacao-aprovacao').checked;
+  const callId = 'call_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7);
+  const link = window.location.origin + window.location.pathname + '#chamada=' + chatIdAlvo + '_' + callId;
+
+  db.collection('chats').doc(chatIdAlvo).collection('chamadas_grupo').doc(callId).set({
+    tipo: tipo,
+    exigirAprovacao: exigirAprovacao,
+    criadoPor: myEmail,
+    criadoEm: firebase.firestore.FieldValue.serverTimestamp(),
+    participantes: []
+  }).then(() => db.collection('chats').doc(chatIdAlvo).collection('messages').add(Object.assign({
+    type: 'chamada_link',
+    tipoChamada: tipo,
+    callId: callId,
+    exigirAprovacao: exigirAprovacao,
+    url: link,
+    sender: myEmail,
+    timestamp: firebase.firestore.FieldValue.serverTimestamp()
+  }, dadosExpiracaoAtual())))
+    .then(() => {
+      fecharEnviarLigacaoModal();
+      mostrarToast('Ligação enviada para o grupo');
+    })
+    .catch((err) => {
+      console.error('Erro ao enviar ligação para chamada:', err);
+      mostrarToast('Não foi possível enviar a ligação.');
+    });
+}
+
+// Participar numa chamada de grupo a partir do cartão de ligação
+function participarLigacaoChamada(callId, tipo) {
+  entrarChamadaGrupo(currentChatId, callId, tipo);
+}
+
+// ================= AGENDAR CHAMADA =================
+let agendarChamadaTipoAtual = 'video';
+const opcoesLembreteAgendar = [
+  { minutos: 15, nome: '15 minutos antes' },
+  { minutos: 30, nome: '30 minutos antes' },
+  { minutos: 60, nome: '1 hora antes' },
+  { minutos: 0, nome: 'Sem lembrete' }
+];
+let agendarChamadaLembreteAtual = 15;
+
+function abrirAgendarChamada() {
+  agendarChamadaTipoAtual = 'video';
+  agendarChamadaLembreteAtual = 15;
+
+  document.getElementById('agendar-chamada-titulo').value = 'Chamada de ' + chatNameAtual;
+  document.getElementById('agendar-chamada-descricao').value = '';
+  document.getElementById('agendar-chamada-aprovacao').checked = false;
+  document.getElementById('agendar-chamada-tipo-label').innerText = 'Vídeo';
+  document.getElementById('agendar-chamada-lembrete-label').innerText = '15 minutos antes';
+
+  const agora = new Date();
+  agora.setMinutes(agora.getMinutes() + 60 - (agora.getMinutes() % 30)); // arredonda para os 30 min seguintes
+  const fim = new Date(agora.getTime() + 30 * 60000);
+  document.getElementById('agendar-chamada-inicio').value = formatarParaDatetimeLocal(agora);
+  document.getElementById('agendar-chamada-fim').value = formatarParaDatetimeLocal(fim);
+  document.getElementById('agendar-chamada-fim-linha').classList.remove('hidden');
+  document.getElementById('agendar-chamada-toggle-fim').innerText = 'Remover hora de fim';
+
+  document.getElementById('agendar-chamada-screen').classList.remove('hidden');
+}
+
+function fecharAgendarChamada() {
+  document.getElementById('agendar-chamada-screen').classList.add('hidden');
+}
+
+// Converte um objeto Date para o formato aceite por <input type="datetime-local">
+function formatarParaDatetimeLocal(d) {
+  const pad = (n) => String(n).padStart(2, '0');
+  return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()) + 'T' + pad(d.getHours()) + ':' + pad(d.getMinutes());
+}
+
+function alternarHoraFimAgendar() {
+  const linha = document.getElementById('agendar-chamada-fim-linha');
+  const toggle = document.getElementById('agendar-chamada-toggle-fim');
+  const escondida = linha.classList.toggle('hidden');
+  toggle.innerText = escondida ? 'Adicionar hora de fim' : 'Remover hora de fim';
+}
+
+function alternarTipoAgendarChamada() {
+  agendarChamadaTipoAtual = agendarChamadaTipoAtual === 'video' ? 'voz' : 'video';
+  document.getElementById('agendar-chamada-tipo-label').innerText = agendarChamadaTipoAtual === 'voz' ? 'Voz' : 'Vídeo';
+}
+
+// Avança para a opção seguinte da lista de lembretes a cada toque (evita construir outro modal)
+function avancarOpcaoLembrete() {
+  const indiceAtual = opcoesLembreteAgendar.findIndex((o) => o.minutos === agendarChamadaLembreteAtual);
+  const proximo = opcoesLembreteAgendar[(indiceAtual + 1) % opcoesLembreteAgendar.length];
+  agendarChamadaLembreteAtual = proximo.minutos;
+  document.getElementById('agendar-chamada-lembrete-label').innerText = proximo.nome;
+}
+
+function confirmarAgendarChamada() {
+  const titulo = document.getElementById('agendar-chamada-titulo').value.trim();
+  const descricao = document.getElementById('agendar-chamada-descricao').value.trim();
+  const inicioStr = document.getElementById('agendar-chamada-inicio').value;
+  const temFim = !document.getElementById('agendar-chamada-fim-linha').classList.contains('hidden');
+  const fimStr = temFim ? document.getElementById('agendar-chamada-fim').value : '';
+
+  if (!titulo) { mostrarToast('Dá um título à chamada.'); return; }
+  if (!inicioStr) { mostrarToast('Escolhe a data e hora de início.'); return; }
+
+  const inicio = new Date(inicioStr);
+  const fim = fimStr ? new Date(fimStr) : null;
+  if (fim && fim <= inicio) { mostrarToast('A hora de fim tem de ser depois do início.'); return; }
+
+  const chatIdAlvo = currentChatId;
+  const myEmail = getCurrentUserEmail();
+  const dados = {
+    titulo: titulo,
+    descricao: descricao,
+    inicio: firebase.firestore.Timestamp.fromDate(inicio),
+    fim: fim ? firebase.firestore.Timestamp.fromDate(fim) : null,
+    tipoChamada: agendarChamadaTipoAtual,
+    exigirAprovacao: document.getElementById('agendar-chamada-aprovacao').checked,
+    lembreteMinutos: agendarChamadaLembreteAtual,
+    criadoPor: myEmail,
+    criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  db.collection('chats').doc(chatIdAlvo).collection('agendamentos').add(dados)
+    .then(() => db.collection('chats').doc(chatIdAlvo).collection('messages').add(Object.assign({
+      type: 'chamada_agendada',
+      titulo: dados.titulo,
+      descricao: dados.descricao,
+      inicio: dados.inicio,
+      fim: dados.fim,
+      tipoChamada: dados.tipoChamada,
+      exigirAprovacao: dados.exigirAprovacao,
+      sender: myEmail,
+      timestamp: firebase.firestore.FieldValue.serverTimestamp()
+    }, dadosExpiracaoAtual())))
+    .then(() => {
+      fecharAgendarChamada();
+      mostrarToast('Chamada agendada');
+    })
+    .catch((err) => {
+      console.error('Erro ao agendar chamada:', err);
+      mostrarToast('Não foi possível agendar a chamada.');
+    });
+}
+
+// Lembrete simples: enquanto esta conversa estiver aberta, avisa quando faltar pouco para a chamada agendada
+const lembretesJaAvisados = new Set();
+
+function verificarLembretesAgendados() {
+  const chatIdAlvo = currentChatId;
+  if (!chatIdAlvo) return;
+
+  db.collection('chats').doc(chatIdAlvo).collection('agendamentos').get().then((snapshot) => {
+    const agora = Date.now();
+    snapshot.forEach((doc) => {
+      const ag = doc.data();
+      if (!ag.inicio || !ag.inicio.toMillis || !ag.lembreteMinutos) return;
+      if (lembretesJaAvisados.has(doc.id)) return;
+
+      const inicioMs = ag.inicio.toMillis();
+      const janelaInicio = inicioMs - ag.lembreteMinutos * 60000;
+      if (agora >= janelaInicio && agora < inicioMs) {
+        lembretesJaAvisados.add(doc.id);
+        mostrarToast('Chamada "' + (ag.titulo || 'Sem título') + '" começa em breve!');
+      }
+    });
+  }).catch((err) => console.error('Erro ao verificar lembretes de chamadas:', err));
+}
+
+// ================= CHAMADA DE GRUPO (3+ pessoas, mesh WebRTC via Firestore) =================
+// Sem servidor de mídia próprio: cada participante liga-se diretamente a todos os outros
+// (topologia "mesh"). Funciona bem até ~4-5 pessoas; com mais, o consumo de dados/CPU
+// de cada telemóvel cresce muito. Sinalização (ofertas/respostas/candidatos ICE) via Firestore,
+// tal como na chamada 1-para-1 — sem TURN próprio, pode falhar em redes muito restritivas.
+
+let grupoCallIdAtual = null;
+let grupoChatIdAtual = null;
+let grupoTipoAtual = 'video';
+let grupoLocalStream = null;
+const grupoPeerConnections = {}; // email -> RTCPeerConnection
+const grupoCandidatosPendentes = {}; // email -> [candidatos recebidos antes de haver peer connection]
+let unsubscribeGrupoPresentes = null;
+let unsubscribeGrupoSinais = null;
+let grupoCronometro = null;
+let grupoSegundos = 0;
+
+function entrarChamadaGrupo(chatId, callId, tipo) {
+  if (grupoCallIdAtual) {
+    mostrarToast('Já estás numa chamada de grupo.');
+    return;
+  }
+
+  const myEmail = getCurrentUserEmail();
+  const constraints = tipo === 'video' ? { audio: true, video: true } : { audio: true, video: false };
+
+  navigator.mediaDevices.getUserMedia(constraints)
+    .then((stream) => {
+      grupoLocalStream = stream;
+      grupoCallIdAtual = callId;
+      grupoChatIdAtual = chatId;
+      grupoTipoAtual = tipo;
+
+      mostrarEcraChamadaGrupo();
+      criarTileGrupo(myEmail, 'Tu', stream, tipo === 'video');
+
+      const refPresentes = db.collection('chats').doc(chatId).collection('chamadas_grupo').doc(callId).collection('presentes');
+
+      // Quem já estava na chamada antes de mim: eu é que inicio a ligação para cada um (evita duplicar ofertas)
+      return refPresentes.get().then((snapshot) => {
+        const jaPresentes = snapshot.docs.map((d) => d.id).filter((email) => email !== myEmail);
+
+        return refPresentes.doc(myEmail).set({ entradaEm: firebase.firestore.FieldValue.serverTimestamp(), tipo: tipo })
+          .then(() => {
+            jaPresentes.forEach((email) => iniciarLigacaoParaPeer(email));
+            escutarPresentesGrupo(chatId, callId, myEmail);
+            escutarSinaisGrupo(chatId, callId, myEmail);
+            db.collection('chats').doc(chatId).collection('chamadas_grupo').doc(callId)
+              .set({ participantes: firebase.firestore.FieldValue.arrayUnion(myEmail) }, { merge: true }).catch(() => {});
+          });
+      });
+    })
+    .catch((err) => {
+      console.error('Erro ao entrar na chamada de grupo:', err);
+      mostrarToast('Não foi possível aceder à câmara/microfone.');
+    });
+}
+
+function mostrarEcraChamadaGrupo() {
+  document.getElementById('group-call-titulo').innerText = chatNameAtual || 'Chamada de grupo';
+  document.getElementById('group-call-status').innerText = 'Em chamada';
+  document.getElementById('group-call-grid').innerHTML = '';
+  document.getElementById('group-call-screen').classList.remove('hidden');
+  grupoSegundos = 0;
+  clearInterval(grupoCronometro);
+  grupoCronometro = setInterval(() => {
+    grupoSegundos++;
+    const m = String(Math.floor(grupoSegundos / 60)).padStart(2, '0');
+    const s = String(grupoSegundos % 60).padStart(2, '0');
+    const status = document.getElementById('group-call-status');
+    if (status) status.innerText = m + ':' + s;
+  }, 1000);
+}
+
+// Cria (ou atualiza) o "cartão" visual de um participante na grelha da chamada
+function criarTileGrupo(email, nomeExibicao, stream, comVideo) {
+  let tile = document.getElementById('tile-' + sanitizarIdEmail(email));
+  if (!tile) {
+    tile = document.createElement('div');
+    tile.id = 'tile-' + sanitizarIdEmail(email);
+    tile.style.cssText = 'flex:1 1 45%; min-width:140px; aspect-ratio:3/4; background:#1f2c34; border-radius:10px; overflow:hidden; position:relative;';
+    document.getElementById('group-call-grid').appendChild(tile);
+  }
+
+  const nome = nomeExibicao || email.split('@')[0];
+  tile.innerHTML = '';
+
+  if (comVideo && stream) {
+    const video = document.createElement('video');
+    video.autoplay = true;
+    video.playsInline = true;
+    if (email === getCurrentUserEmail()) video.muted = true;
+    video.srcObject = stream;
+    video.style.cssText = 'width:100%; height:100%; object-fit:cover;';
+    tile.appendChild(video);
+  } else {
+    const avatar = document.createElement('div');
+    avatar.style.cssText = 'width:100%; height:100%; display:flex; align-items:center; justify-content:center; background:#2a3942;';
+    avatar.innerHTML = '<div class="avatar" style="width:60px; height:60px; font-size:20px;">' + nome.substring(0, 2).toUpperCase() + '</div>';
+    tile.appendChild(avatar);
+
+    if (stream) {
+      const audio = document.createElement('audio');
+      audio.autoplay = true;
+      if (email === getCurrentUserEmail()) audio.muted = true;
+      audio.srcObject = stream;
+      tile.appendChild(audio);
+    }
+  }
+
+  const label = document.createElement('div');
+  label.innerText = nome;
+  label.style.cssText = 'position:absolute; bottom:6px; left:8px; color:#fff; font-size:12px; text-shadow:0 1px 3px rgba(0,0,0,0.8);';
+  tile.appendChild(label);
+}
+
+function removerTileGrupo(email) {
+  const tile = document.getElementById('tile-' + sanitizarIdEmail(email));
+  if (tile) tile.remove();
+}
+
+function sanitizarIdEmail(email) {
+  return (email || '').replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+function criarPeerConnectionGrupo(email) {
+  const pc = new RTCPeerConnection(configuracaoRTC);
+  grupoPeerConnections[email] = pc;
+
+  if (grupoLocalStream) {
+    grupoLocalStream.getTracks().forEach((track) => pc.addTrack(track, grupoLocalStream));
+  }
+
+  pc.onicecandidate = (event) => {
+    if (!event.candidate) return;
+    enviarSinalGrupo(email, 'candidato', event.candidate.toJSON());
+  };
+
+  pc.ontrack = (event) => {
+    criarTileGrupo(email, email.split('@')[0], event.streams[0], grupoTipoAtual === 'video');
+  };
+
+  pc.onconnectionstatechange = () => {
+    if (pc.connectionState === 'disconnected' || pc.connectionState === 'failed' || pc.connectionState === 'closed') {
+      fecharPeerGrupo(email);
+    }
+  };
+
+  return pc;
+}
+
+function iniciarLigacaoParaPeer(email) {
+  const pc = criarPeerConnectionGrupo(email);
+  pc.createOffer()
+    .then((offer) => pc.setLocalDescription(offer).then(() => offer))
+    .then((offer) => enviarSinalGrupo(email, 'oferta', { type: offer.type, sdp: offer.sdp }))
+    .catch((err) => console.error('Erro ao criar oferta para ' + email + ':', err));
+}
+
+function enviarSinalGrupo(paraEmail, tipo, dados) {
+  const myEmail = getCurrentUserEmail();
+  db.collection('chats').doc(grupoChatIdAtual).collection('chamadas_grupo').doc(grupoCallIdAtual)
+    .collection('sinais').add({
+      de: myEmail,
+      para: paraEmail,
+      tipo: tipo,
+      dados: dados,
+      criadoEm: firebase.firestore.FieldValue.serverTimestamp()
+    }).catch((err) => console.error('Erro ao enviar sinal de chamada:', err));
+}
+
+function escutarPresentesGrupo(chatId, callId, myEmail) {
+  if (unsubscribeGrupoPresentes) unsubscribeGrupoPresentes();
+  unsubscribeGrupoPresentes = db.collection('chats').doc(chatId).collection('chamadas_grupo').doc(callId)
+    .collection('presentes').onSnapshot((snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        const email = change.doc.id;
+        if (email === myEmail) return;
+        if (change.type === 'removed') fecharPeerGrupo(email);
+        // Quem chega depois de mim inicia a ligação para mim — eu só espero a oferta dele.
+      });
+    }, (err) => console.error('Erro ao escutar presentes na chamada:', err));
+}
+
+function escutarSinaisGrupo(chatId, callId, myEmail) {
+  if (unsubscribeGrupoSinais) unsubscribeGrupoSinais();
+  unsubscribeGrupoSinais = db.collection('chats').doc(chatId).collection('chamadas_grupo').doc(callId)
+    .collection('sinais').where('para', '==', myEmail)
+    .onSnapshot((snapshot) => {
+      snapshot.docChanges().forEach((change) => {
+        if (change.type !== 'added') return;
+        const sinal = change.doc.data();
+        processarSinalGrupo(sinal);
+        change.doc.ref.delete().catch(() => {});
+      });
+    }, (err) => console.error('Erro ao escutar sinais de chamada:', err));
+}
+
+function processarSinalGrupo(sinal) {
+  const de = sinal.de;
+
+  if (sinal.tipo === 'oferta') {
+    const pc = criarPeerConnectionGrupo(de);
+    pc.setRemoteDescription(new RTCSessionDescription(sinal.dados))
+      .then(() => aplicarCandidatosPendentes(de, pc))
+      .then(() => pc.createAnswer())
+      .then((answer) => pc.setLocalDescription(answer).then(() => answer))
+      .then((answer) => enviarSinalGrupo(de, 'resposta', { type: answer.type, sdp: answer.sdp }))
+      .catch((err) => console.error('Erro ao responder oferta de ' + de + ':', err));
+    return;
+  }
+
+  if (sinal.tipo === 'resposta') {
+    const pc = grupoPeerConnections[de];
+    if (!pc) return;
+    pc.setRemoteDescription(new RTCSessionDescription(sinal.dados))
+      .then(() => aplicarCandidatosPendentes(de, pc))
+      .catch((err) => console.error('Erro ao aplicar resposta de ' + de + ':', err));
+    return;
+  }
+
+  if (sinal.tipo === 'candidato') {
+    const pc = grupoPeerConnections[de];
+    if (pc && pc.remoteDescription) {
+      pc.addIceCandidate(new RTCIceCandidate(sinal.dados)).catch((err) => console.error('Erro ao adicionar candidato ICE:', err));
+    } else {
+      if (!grupoCandidatosPendentes[de]) grupoCandidatosPendentes[de] = [];
+      grupoCandidatosPendentes[de].push(sinal.dados);
+    }
+  }
+}
+
+function aplicarCandidatosPendentes(email, pc) {
+  const pendentes = grupoCandidatosPendentes[email] || [];
+  delete grupoCandidatosPendentes[email];
+  return Promise.all(pendentes.map((c) => pc.addIceCandidate(new RTCIceCandidate(c)).catch(() => {})));
+}
+
+function fecharPeerGrupo(email) {
+  const pc = grupoPeerConnections[email];
+  if (pc) { pc.close(); delete grupoPeerConnections[email]; }
+  delete grupoCandidatosPendentes[email];
+  removerTileGrupo(email);
+}
+
+function alternarMudoGrupo() {
+  if (!grupoLocalStream) return;
+  const audioTrack = grupoLocalStream.getAudioTracks()[0];
+  if (!audioTrack) return;
+  audioTrack.enabled = !audioTrack.enabled;
+  const btn = document.getElementById('group-call-btn-mudo');
+  if (btn) btn.style.background = audioTrack.enabled ? 'rgba(255,255,255,0.15)' : '#f15c6d';
+}
+
+function encerrarChamadaGrupo() {
+  const chatId = grupoChatIdAtual;
+  const callId = grupoCallIdAtual;
+  const myEmail = getCurrentUserEmail();
+
+  if (chatId && callId && myEmail) {
+    db.collection('chats').doc(chatId).collection('chamadas_grupo').doc(callId)
+      .collection('presentes').doc(myEmail).delete().catch(() => {});
+  }
+
+  Object.keys(grupoPeerConnections).forEach((email) => fecharPeerGrupo(email));
+  if (unsubscribeGrupoPresentes) { unsubscribeGrupoPresentes(); unsubscribeGrupoPresentes = null; }
+  if (unsubscribeGrupoSinais) { unsubscribeGrupoSinais(); unsubscribeGrupoSinais = null; }
+  clearInterval(grupoCronometro);
+  grupoCronometro = null;
+
+  if (grupoLocalStream) { grupoLocalStream.getTracks().forEach((t) => t.stop()); grupoLocalStream = null; }
+
+  grupoCallIdAtual = null;
+  grupoChatIdAtual = null;
+  document.getElementById('group-call-screen').classList.add('hidden');
+  document.getElementById('group-call-grid').innerHTML = '';
 }

@@ -221,11 +221,118 @@
         </div>
       </header>
 
+      <!-- Menu de opções de chamada (aberto pelo botão de vídeo em conversas de grupo) -->
+      <div id="group-call-menu" class="hidden" style="position:absolute; top:52px; right:46px; background:#fff; border-radius:10px; box-shadow:0 4px 14px rgba(0,0,0,0.35); width:250px; z-index:400; overflow:hidden;">
+        <div style="padding:14px 18px; display:flex; align-items:center; gap:16px; cursor:pointer; color:#111; font-size:15px; border-bottom:1px solid #eee;" onclick="acaoChamadaGrupo('voz')">
+          <i class="fa-solid fa-phone" style="width:18px; color:#3b4a54;"></i> Chamada de voz
+        </div>
+        <div style="padding:14px 18px; display:flex; align-items:center; gap:16px; cursor:pointer; color:#111; font-size:15px; border-bottom:1px solid #eee;" onclick="acaoChamadaGrupo('video')">
+          <i class="fa-solid fa-video" style="width:18px; color:#3b4a54;"></i> Videochamada
+        </div>
+        <div style="padding:14px 18px; display:flex; align-items:center; gap:16px; cursor:pointer; color:#111; font-size:15px; border-bottom:1px solid #eee;" onclick="acaoChamadaGrupo('link')">
+          <i class="fa-solid fa-link" style="width:18px; color:#3b4a54;"></i> Enviar ligação para chamada
+        </div>
+        <div style="padding:14px 18px; display:flex; align-items:center; gap:16px; cursor:pointer; color:#111; font-size:15px;" onclick="acaoChamadaGrupo('agendar')">
+          <i class="fa-solid fa-calendar-days" style="width:18px; color:#3b4a54;"></i> Agendar chamada
+        </div>
+      </div>
+
       <!-- Barra de pesquisa (oculta até tocar em "Pesquisar" no menu) -->
       <div id="search-bar" class="hidden" style="flex-shrink:0; background:var(--whatsapp-panel); padding:8px 14px; display:flex; align-items:center; gap:10px; border-bottom:1px solid #2a3942;">
         <span class="fa-solid fa-magnifying-glass" style="color:#8696a0; font-size:14px;"></span>
         <input type="text" id="search-input" placeholder="Pesquisar nesta conversa" style="flex:1; background:transparent; border:none; color:#fff; outline:none; font-size:14px;">
         <span class="fa-solid fa-xmark" onclick="fecharPesquisaMensagens()" style="color:#8696a0; cursor:pointer;"></span>
+      </div>
+
+      <!-- Bottom sheet: Enviar ligação para chamada -->
+      <div id="enviar-ligacao-modal" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:520; display:flex; align-items:flex-end;">
+        <div style="background:#fff; border-radius:16px 16px 0 0; width:100%; padding:10px 22px 26px;">
+          <div style="width:36px; height:4px; background:#ccc; border-radius:2px; margin:0 auto 18px;"></div>
+          <h3 style="color:#111; font-size:19px; margin-bottom:10px;">Partilhar ligação para chamada</h3>
+          <p style="color:#667781; font-size:13px; line-height:1.5; margin-bottom:20px;">Partilhe uma ligação para convidar alguém para uma chamada.</p>
+
+          <div onclick="alternarTipoEnviarLigacao()" style="display:flex; align-items:center; gap:14px; padding:10px 0; cursor:pointer; border-bottom:1px solid #eee; margin-bottom:16px;">
+            <div style="width:40px; height:40px; border-radius:50%; background:#111; display:flex; align-items:center; justify-content:center; flex-shrink:0;">
+              <span id="enviar-ligacao-icone" class="fa-solid fa-video" style="color:#fff; font-size:16px;"></span>
+            </div>
+            <div style="flex:1;">
+              <div id="enviar-ligacao-label" style="color:#111; font-size:15px; font-weight:bold;">Videochamada</div>
+              <div style="color:#667781; font-size:12px;">Toca para mudar o tipo de chamada</div>
+            </div>
+            <span class="fa-solid fa-chevron-down" style="color:#667781; font-size:12px;"></span>
+          </div>
+
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:10px 0; margin-bottom:24px;">
+            <div>
+              <div style="color:#111; font-size:14px;">Exigir aprovação para aderir</div>
+            </div>
+            <label class="perm-switch"><input type="checkbox" id="enviar-ligacao-aprovacao"><span class="perm-slider"></span></label>
+          </div>
+
+          <button onclick="confirmarEnviarLigacao()" style="width:100%; padding:13px; background:var(--whatsapp-teal); color:#fff; border:none; border-radius:24px; font-weight:bold; font-size:14px; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:10px;">
+            <span class="fa-solid fa-paper-plane"></span> Enviar ligação para o grupo
+          </button>
+        </div>
+      </div>
+
+      <!-- Ecrã: Agendar chamada -->
+      <div id="agendar-chamada-screen" class="hidden" style="position:fixed; inset:0; background:#fff; z-index:520; display:flex; flex-direction:column; overflow-y:auto;">
+        <div style="display:flex; align-items:center; gap:16px; padding:16px; border-bottom:1px solid #eee;">
+          <span class="fa-solid fa-arrow-left" onclick="fecharAgendarChamada()" style="color:#111; cursor:pointer; font-size:18px;"></span>
+          <h3 style="color:#111; font-size:18px;">Agendar chamada</h3>
+        </div>
+
+        <div style="padding:20px 22px;">
+          <div style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+            <input id="agendar-chamada-titulo" type="text" maxlength="100" style="flex:1; border:none; outline:none; font-size:19px; font-weight:bold; color:#111;">
+            <span class="fa-solid fa-xmark" onclick="document.getElementById('agendar-chamada-titulo').value=''" style="color:#999; cursor:pointer;"></span>
+          </div>
+          <textarea id="agendar-chamada-descricao" placeholder="Descrição (opcional)" style="width:100%; border:none; outline:none; color:#667781; font-size:14px; resize:vertical; min-height:36px; margin-bottom:18px;"></textarea>
+
+          <div style="border-top:1px solid #eee; padding-top:16px;">
+            <label style="display:flex; align-items:center; gap:14px; margin-bottom:14px;">
+              <span class="fa-regular fa-calendar" style="color:#3b4a54; width:18px;"></span>
+              <span style="color:#667781; font-size:13px; width:60px;">Início</span>
+              <input id="agendar-chamada-inicio" type="datetime-local" style="flex:1; border:none; outline:none; color:#111; font-size:14px;">
+            </label>
+            <label id="agendar-chamada-fim-linha" style="display:flex; align-items:center; gap:14px; margin-bottom:6px;">
+              <span class="fa-regular fa-calendar" style="color:#3b4a54; width:18px;"></span>
+              <span style="color:#667781; font-size:13px; width:60px;">Fim</span>
+              <input id="agendar-chamada-fim" type="datetime-local" style="flex:1; border:none; outline:none; color:#111; font-size:14px;">
+            </label>
+            <div id="agendar-chamada-toggle-fim" onclick="alternarHoraFimAgendar()" style="color:var(--whatsapp-teal); font-size:13px; font-weight:bold; cursor:pointer; margin-bottom:18px;">Remover hora de fim</div>
+          </div>
+
+          <div onclick="alternarTipoAgendarChamada()" style="display:flex; align-items:center; gap:14px; padding:14px 0; cursor:pointer; border-top:1px solid #eee;">
+            <span class="fa-solid fa-video" style="color:#3b4a54; width:18px;"></span>
+            <div style="flex:1;">
+              <div style="color:#111; font-size:14px;">Tipo de chamada</div>
+              <div id="agendar-chamada-tipo-label" style="color:#667781; font-size:12px;">Vídeo</div>
+            </div>
+          </div>
+
+          <div style="display:flex; align-items:center; justify-content:space-between; padding:14px 0; border-top:1px solid #eee;">
+            <div style="display:flex; align-items:center; gap:14px;">
+              <span class="fa-solid fa-user-clock" style="color:#3b4a54; width:18px;"></span>
+              <span style="color:#111; font-size:14px;">Exigir aprovação para aderir</span>
+            </div>
+            <label class="perm-switch"><input type="checkbox" id="agendar-chamada-aprovacao"><span class="perm-slider"></span></label>
+          </div>
+
+          <div onclick="avancarOpcaoLembrete()" style="display:flex; align-items:center; gap:14px; padding:14px 0; cursor:pointer; border-top:1px solid #eee;">
+            <span class="fa-regular fa-bell" style="color:#3b4a54; width:18px;"></span>
+            <div style="flex:1;">
+              <div style="color:#111; font-size:14px;">Lembrete</div>
+              <div id="agendar-chamada-lembrete-label" style="color:#667781; font-size:12px;">15 minutos antes</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex; justify-content:flex-end; padding:16px 22px;">
+          <div onclick="confirmarAgendarChamada()" style="width:52px; height:52px; border-radius:50%; background:var(--whatsapp-teal); display:flex; align-items:center; justify-content:center; cursor:pointer;">
+            <span class="fa-solid fa-arrow-right" style="color:#fff; font-size:18px;"></span>
+          </div>
+        </div>
       </div>
 
       <!-- Menu do cabeçalho (3 pontos) -->
@@ -407,6 +514,25 @@
       </div>
       <div onclick="aceitarChamada()" style="width:60px; height:60px; border-radius:50%; background:#00a884; display:flex; align-items:center; justify-content:center; cursor:pointer;">
         <span class="fa-solid fa-phone" style="color:#fff; font-size:22px;"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ecrã de Chamada de Grupo (3+ participantes, mesh WebRTC) -->
+  <div id="group-call-screen" class="hidden" style="position:fixed; inset:0; background:#111b21; z-index:400; display:flex; flex-direction:column; padding:16px;">
+    <div style="text-align:center; margin-bottom:12px; flex-shrink:0;">
+      <h2 id="group-call-titulo" style="color:#e9edef; font-size:17px;"></h2>
+      <p id="group-call-status" style="color:#8696a0; font-size:13px; margin-top:2px;"></p>
+    </div>
+
+    <div id="group-call-grid" style="flex:1; display:flex; flex-wrap:wrap; align-content:flex-start; gap:8px; overflow-y:auto;"></div>
+
+    <div style="display:flex; justify-content:center; gap:24px; padding-top:16px; flex-shrink:0;">
+      <div id="group-call-btn-mudo" onclick="alternarMudoGrupo()" style="width:52px; height:52px; border-radius:50%; background:rgba(255,255,255,0.15); display:flex; align-items:center; justify-content:center; cursor:pointer;">
+        <span class="fa-solid fa-microphone" style="color:#fff; font-size:20px;"></span>
+      </div>
+      <div onclick="encerrarChamadaGrupo()" style="width:60px; height:60px; border-radius:50%; background:#c41e3a; display:flex; align-items:center; justify-content:center; cursor:pointer;">
+        <span class="fa-solid fa-phone-slash" style="color:#fff; font-size:22px;"></span>
       </div>
     </div>
   </div>
