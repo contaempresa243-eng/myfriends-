@@ -921,8 +921,10 @@ function renderHeaderNormal() {
   document.getElementById('chat-header').innerHTML =
     '<div style="display:flex; align-items:center; flex:1; min-width:0;">' +
       '<span class="fa-solid fa-arrow-left" onclick="closeChat()" style="margin-right:15px; cursor:pointer; color:#aebac1; flex-shrink:0;"></span>' +
-      '<div class="avatar" style="width:35px; height:35px; font-size:14px; margin-right:10px; flex-shrink:0;">' + chatAvatarAtual + '</div>' +
-      '<h3 style="font-size:16px; color:#e9edef; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + chatNameAtual + '</h3>' +
+      '<div onclick="abrirDetalhesGrupo()" style="display:flex; align-items:center; flex:1; min-width:0; cursor:pointer;">' +
+        '<div class="avatar" style="width:35px; height:35px; font-size:14px; margin-right:10px; flex-shrink:0;">' + chatAvatarAtual + '</div>' +
+        '<h3 style="font-size:16px; color:#e9edef; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + chatNameAtual + '</h3>' +
+      '</div>' +
     '</div>' +
     '<div class="header-icons" style="display:flex; align-items:center; flex-shrink:0;">' +
       '<span class="fa-solid fa-video" onclick="startVideoCall()" style="margin-right:15px;"></span>' +
