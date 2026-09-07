@@ -861,6 +861,7 @@ let comunidadeIdAtual = null;
 let chatApenasAdminsAtual = false;
 let chatAdminsAtual = [];
 let chatAvatarAtual = '';
+let chatFotoAtual = '';
 
 // Mensagens temporárias: duração ativa (em segundos) para o chat atualmente aberto
 let chatTemporariasDuracaoAtual = 0;
@@ -871,6 +872,7 @@ function openChat(chatId, chatName, outroEmail, extra) {
   currentChatId = chatId;
   chatNameAtual = chatName;
   chatAvatarAtual = chatName.substring(0, 2).toUpperCase();
+  chatFotoAtual = '';
   chamadaOutroEmail = outroEmail || null;
 
   chatTipoAtual = (extra && extra.tipo) || (outroEmail ? '1v1' : 'grupo');
@@ -918,11 +920,15 @@ function closeChat() {
 
 // Alterna o cabeçalho do chat entre o modo normal e o modo de seleção de mensagens
 function renderHeaderNormal() {
+  const avatarHtml = chatFotoAtual
+    ? '<img src="' + chatFotoAtual + '" style="width:35px; height:35px; border-radius:50%; object-fit:cover; margin-right:10px; flex-shrink:0;">'
+    : '<div class="avatar" style="width:35px; height:35px; font-size:14px; margin-right:10px; flex-shrink:0;">' + chatAvatarAtual + '</div>';
+
   document.getElementById('chat-header').innerHTML =
     '<div style="display:flex; align-items:center; flex:1; min-width:0;">' +
       '<span class="fa-solid fa-arrow-left" onclick="closeChat()" style="margin-right:15px; cursor:pointer; color:#aebac1; flex-shrink:0;"></span>' +
       '<div onclick="abrirDetalhesGrupo()" style="display:flex; align-items:center; flex:1; min-width:0; cursor:pointer;">' +
-        '<div class="avatar" style="width:35px; height:35px; font-size:14px; margin-right:10px; flex-shrink:0;">' + chatAvatarAtual + '</div>' +
+        avatarHtml +
         '<h3 style="font-size:16px; color:#e9edef; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + chatNameAtual + '</h3>' +
       '</div>' +
     '</div>' +
@@ -2897,19 +2903,28 @@ function dadosExpiracaoAtual() {
   return {};
 }
 
-// Mantém chatTemporariasDuracaoAtual sincronizado em tempo real (qualquer membro pode mudar a definição)
+// Mantém chatTemporariasDuracaoAtual e a foto do cabeçalho sincronizados em tempo real
+// (qualquer membro pode mudar a definição ou a foto do grupo)
 function escutarConfigTemporariasChat() {
   pararConfigTemporariasChat();
   const chatIdAoEscutar = currentChatId;
   unsubscribeConfigChatTemporarias = db.collection('chats').doc(chatIdAoEscutar).onSnapshot((doc) => {
+    if (currentChatId !== chatIdAoEscutar) return;
     chatTemporariasDuracaoAtual = (doc.exists && doc.data().mensagensTemporariasDuracao) || 0;
-    if (currentChatId === chatIdAoEscutar) atualizarDetalhesTemporarias();
-  }, (err) => console.error('Erro ao escutar configuração de mensagens temporárias:', err));
+    atualizarDetalhesTemporarias();
+
+    const novaFoto = (doc.exists && doc.data().foto) || '';
+    if (novaFoto !== chatFotoAtual) {
+      chatFotoAtual = novaFoto;
+      if (mensagensSelecionadas.size === 0) renderHeaderNormal();
+    }
+  }, (err) => console.error('Erro ao escutar configuração do chat:', err));
 }
 
 function pararConfigTemporariasChat() {
   if (unsubscribeConfigChatTemporarias) { unsubscribeConfigChatTemporarias(); unsubscribeConfigChatTemporarias = null; }
   chatTemporariasDuracaoAtual = 0;
+  chatFotoAtual = '';
 }
 
 // Verifica e apaga mensagens já expiradas desta conversa (roda enquanto o chat está aberto)
