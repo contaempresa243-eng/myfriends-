@@ -890,6 +890,7 @@ function openChat(chatId, chatName, outroEmail, extra) {
   loadMessages();
   escutarConfigTemporariasChat();
   iniciarLimpezaTemporarias();
+  escutarDigitandoChat(chatId);
 
   if (chamadaOutroEmail) {
     escutarChamadasRecebidas();
@@ -916,6 +917,7 @@ function closeChat() {
   terminarChamadaLocal();
   pararConfigTemporariasChat();
   pararLimpezaTemporarias();
+  pararDigitandoChat();
   chamadaOutroEmail = null;
 }
 
@@ -935,13 +937,18 @@ function renderHeaderNormal() {
       '<span class="fa-solid fa-arrow-left" onclick="closeChat()" style="margin-right:15px; cursor:pointer; color:#aebac1; flex-shrink:0;"></span>' +
       '<div onclick="abrirDetalhesGrupo()" style="display:flex; align-items:center; flex:1; min-width:0; cursor:pointer;">' +
         avatarHtml +
-        '<h3 style="font-size:16px; color:#e9edef; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + chatNameAtual + '</h3>' +
+        '<div style="min-width:0; flex:1;">' +
+          '<h3 style="font-size:16px; color:#e9edef; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">' + chatNameAtual + '</h3>' +
+          '<p id="chat-header-subtitulo" style="font-size:12px; color:#8696a0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;"></p>' +
+        '</div>' +
       '</div>' +
     '</div>' +
     '<div class="header-icons" style="display:flex; align-items:center; flex-shrink:0;">' +
       iconesChamada +
       '<span class="fa-solid fa-ellipsis-vertical" onclick="toggleChatMenu()"></span>' +
     '</div>';
+
+  atualizarLabelDigitando();
 }
 
 function renderHeaderSelecao() {
@@ -972,6 +979,14 @@ function construirConteudoMensagem(msg) {
       window.open(msg.url, '_blank');
     };
     return img;
+  }
+
+  if (msg.type === 'video') {
+    const video = document.createElement('video');
+    video.src = msg.url;
+    video.controls = true;
+    video.style.cssText = 'max-width:100%; border-radius:8px; display:block;';
+    return video;
   }
 
   if (msg.type === 'documento') {
@@ -1048,6 +1063,7 @@ function formatarDataHora(d) {
 // Prévia curta de uma mensagem (usada em respostas e reencaminhamento)
 function previaMensagem(msg) {
   if (msg.type === 'imagem') return '📷 Imagem';
+  if (msg.type === 'video') return '🎥 Vídeo';
   if (msg.type === 'audio') return '🎤 Áudio';
   if (msg.type === 'documento') return '📄 ' + (msg.nomeFicheiro || 'Documento');
   if (msg.type === 'contacto') return '👤 ' + (msg.nomeContacto || 'Contacto');
@@ -1347,6 +1363,8 @@ function sendFirebaseMessage() {
   const myEmail = getCurrentUserEmail();
   if (!text || !currentChatId) return;
 
+  pararDigitando();
+
   if (chatApenasAdminsAtual && !chatAdminsAtual.includes(myEmail)) {
     mostrarToast('Só administradores podem enviar mensagens neste grupo de anúncios.');
     return;
@@ -1408,7 +1426,10 @@ document.addEventListener('DOMContentLoaded', () => {
         sendFirebaseMessage();
       }
     });
-    messageInput.addEventListener('input', atualizarBotaoMicOuEnviar);
+    messageInput.addEventListener('input', () => {
+      atualizarBotaoMicOuEnviar();
+      marcarDigitando();
+    });
   }
 });
 
@@ -1775,18 +1796,41 @@ function tratarFicheiroSelecionado(event, tipo) {
   const file = event.target.files[0];
   event.target.value = ''; // permite selecionar o mesmo ficheiro outra vez de seguida
   if (!file || !currentChatId) return;
-  enviarFicheiroParaChat(file, tipo);
+  const tipoReal = (tipo === 'imagem' && file.type && file.type.startsWith('video/')) ? 'video' : tipo;
+  enviarFicheiroParaChat(file, tipoReal);
 }
 
 // Faz upload para o Cloudinary e regista a mensagem no Firestore
 function enviarFicheiroParaChat(file, tipo) {
   const myEmail = getCurrentUserEmail();
-
   const container = document.getElementById('messages-container');
-  const aviso = document.createElement('div');
-  aviso.style.cssText = 'align-self:flex-end; color:#667781; font-size:12px; padding:4px;';
-  aviso.innerText = 'A enviar ' + file.name + '...';
-  container.appendChild(aviso);
+  const objectUrl = URL.createObjectURL(file);
+
+  const linha = document.createElement('div');
+  linha.style.cssText = 'display:flex; width:100%; padding:2px 0; justify-content:flex-end;';
+
+  const bubble = document.createElement('div');
+  const ehMedia = tipo === 'imagem' || tipo === 'video';
+  bubble.style.cssText = 'position:relative; background:var(--whatsapp-outgoing); border-radius:7px; overflow:hidden; max-width:70%; ' +
+    (ehMedia ? 'padding:4px;' : 'padding:8px 12px;');
+
+  if (tipo === 'imagem') {
+    bubble.innerHTML = '<img src="' + objectUrl + '" style="width:100%; max-height:260px; object-fit:cover; display:block; border-radius:4px; opacity:0.55;">';
+  } else if (tipo === 'video') {
+    bubble.innerHTML = '<video src="' + objectUrl + '" muted style="width:100%; max-height:260px; object-fit:cover; display:block; border-radius:4px; opacity:0.55;"></video>';
+  } else {
+    bubble.innerHTML = '<div style="display:flex; align-items:center; gap:8px; opacity:0.55;">' +
+      '<i class="fa-solid fa-file-lines" style="font-size:20px; color:#111;"></i>' +
+      '<span style="color:#111; font-size:14px; word-break:break-word;">' + file.name + '</span></div>';
+  }
+
+  bubble.innerHTML += '<div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center;">' +
+    '<div style="width:38px; height:38px; border-radius:50%; background:rgba(0,0,0,0.4); display:flex; align-items:center; justify-content:center;">' +
+      '<span class="fa-solid fa-spinner fa-spin" style="color:#fff; font-size:18px;"></span>' +
+    '</div></div>';
+
+  linha.appendChild(bubble);
+  container.appendChild(linha);
   container.scrollTop = container.scrollHeight;
 
   const formData = new FormData();
@@ -1815,7 +1859,8 @@ function enviarFicheiroParaChat(file, tipo) {
       alert('Não foi possível enviar o ficheiro. Verifica a ligação e tenta novamente.');
     })
     .finally(() => {
-      aviso.remove();
+      linha.remove();
+      URL.revokeObjectURL(objectUrl);
     });
 }
 
@@ -3667,4 +3712,94 @@ function encerrarChamadaGrupo() {
   grupoChatIdAtual = null;
   document.getElementById('group-call-screen').classList.add('hidden');
   document.getElementById('group-call-grid').innerHTML = '';
+}
+
+// ================= INDICADOR "A ESCREVER..." =================
+// Guardado como subcoleção chats/{chatId}/digitando/{email}, com timestamp do servidor.
+// Considera-se "a escrever" enquanto o documento existir e tiver menos de 6 segundos.
+
+let unsubscribeDigitando = null;
+let intervaloDigitandoCheck = null;
+let digitandoDocsAtual = {}; // email -> millis (ou null enquanto o serverTimestamp não resolve)
+let digitandoAtivo = false;
+let timeoutPararDigitando = null;
+
+function marcarDigitando() {
+  const input = document.getElementById('message-input');
+  if (!input || !currentChatId) return;
+
+  clearTimeout(timeoutPararDigitando);
+
+  if (input.value.trim().length === 0) {
+    pararDigitando();
+    return;
+  }
+
+  if (!digitandoAtivo) {
+    digitandoAtivo = true;
+    const myEmail = getCurrentUserEmail();
+    db.collection('chats').doc(currentChatId).collection('digitando').doc(myEmail)
+      .set({ timestamp: firebase.firestore.FieldValue.serverTimestamp() })
+      .catch((err) => console.error('Erro ao marcar "a escrever":', err));
+  }
+
+  timeoutPararDigitando = setTimeout(pararDigitando, 3000);
+}
+
+function pararDigitando() {
+  clearTimeout(timeoutPararDigitando);
+  if (!digitandoAtivo || !currentChatId) { digitandoAtivo = false; return; }
+  digitandoAtivo = false;
+  const myEmail = getCurrentUserEmail();
+  db.collection('chats').doc(currentChatId).collection('digitando').doc(myEmail)
+    .delete().catch(() => {});
+}
+
+function escutarDigitandoChat(chatId) {
+  pararEscutaDigitando();
+  digitandoDocsAtual = {};
+
+  unsubscribeDigitando = db.collection('chats').doc(chatId).collection('digitando')
+    .onSnapshot((snapshot) => {
+      const myEmail = getCurrentUserEmail();
+      digitandoDocsAtual = {};
+      snapshot.forEach((doc) => {
+        if (doc.id === myEmail) return;
+        const dados = doc.data();
+        digitandoDocsAtual[doc.id] = (dados.timestamp && dados.timestamp.toMillis) ? dados.timestamp.toMillis() : Date.now();
+      });
+      atualizarLabelDigitando();
+    }, (err) => console.error('Erro ao escutar "a escrever":', err));
+
+  intervaloDigitandoCheck = setInterval(atualizarLabelDigitando, 2000);
+}
+
+function pararEscutaDigitando() {
+  if (unsubscribeDigitando) { unsubscribeDigitando(); unsubscribeDigitando = null; }
+  if (intervaloDigitandoCheck) { clearInterval(intervaloDigitandoCheck); intervaloDigitandoCheck = null; }
+  digitandoDocsAtual = {};
+}
+
+function pararDigitandoChat() {
+  pararDigitando();
+  pararEscutaDigitando();
+}
+
+function atualizarLabelDigitando() {
+  const el = document.getElementById('chat-header-subtitulo');
+  if (!el) return;
+
+  const agora = Date.now();
+  const ativos = Object.keys(digitandoDocsAtual).filter((email) => (agora - digitandoDocsAtual[email]) < 6000);
+
+  if (!ativos.length) {
+    el.innerText = '';
+    return;
+  }
+
+  if (ativos.length === 1) {
+    el.innerText = ativos[0].split('@')[0] + ' está a escrever...';
+  } else {
+    el.innerText = 'Várias pessoas a escrever...';
+  }
 }
