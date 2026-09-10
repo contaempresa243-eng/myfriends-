@@ -244,11 +244,14 @@ function renderizarListaConversasCombinada() {
 
     const atividade = com.ultimaAtividade;
     const subtitulo = atividade ? (atividade.grupoNome + ' ▶ ' + atividade.texto) : 'Comunidade';
+    const avatarConteudo = com.foto
+      ? '<img src="' + com.foto + '" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">'
+      : '<i class="fa-solid fa-clone" style="font-size:15px; position:absolute; top:6px; left:6px; opacity:0.5;"></i>' +
+        '<i class="fa-solid fa-people-group" style="font-size:16px;"></i>';
 
     item.innerHTML =
-      '<div class="avatar" style="background:#a682e3; position:relative;">' +
-        '<i class="fa-solid fa-clone" style="font-size:15px; position:absolute; top:6px; left:6px; opacity:0.5;"></i>' +
-        '<i class="fa-solid fa-people-group" style="font-size:16px;"></i>' +
+      '<div class="avatar" style="background:#a682e3; position:relative; overflow:hidden;">' +
+        avatarConteudo +
       '</div>' +
       '<div class="chat-info"><h4>' + (com.nome || 'Comunidade') + '</h4><p>' + subtitulo + '</p></div>';
     container.appendChild(item);
@@ -303,8 +306,11 @@ function escutarListaComunidades() {
         const item = document.createElement('div');
         item.className = 'chat-item';
         item.onclick = () => abrirComunidade(doc.id, com);
+        const avatarConteudo = com.foto
+          ? '<img src="' + com.foto + '" style="width:100%; height:100%; object-fit:cover; border-radius:50%;">'
+          : '<i class="fa-solid fa-people-group" style="font-size:16px;"></i>';
         item.innerHTML =
-          '<div class="avatar" style="background:#a682e3;"><i class="fa-solid fa-people-group" style="font-size:16px;"></i></div>' +
+          '<div class="avatar" style="background:#a682e3; overflow:hidden;">' + avatarConteudo + '</div>' +
           '<div class="chat-info"><h4>' + (com.nome || 'Comunidade') + '</h4><p>Comunidade</p></div>';
         container.appendChild(item);
       });
@@ -399,7 +405,7 @@ function criarComunidade() {
     }))
     .then(() => {
       fecharCriarComunidade();
-      abrirComunidade(comunidadeRef.id, { nome: nome, admins: [myEmail], membros: [myEmail] });
+      abrirComunidade(comunidadeRef.id, { nome: nome, foto: fotoUrl || null, admins: [myEmail], membros: [myEmail] });
     })
     .catch((err) => {
       console.error('Erro ao criar comunidade:', err);
@@ -420,6 +426,9 @@ function abrirComunidade(comunidadeId, dados) {
   document.getElementById('community-screen').style.display = 'flex';
   document.getElementById('community-nome').innerText = dados.nome || 'Comunidade';
   document.getElementById('community-subtitulo').innerText = 'Comunidade';
+  document.getElementById('community-avatar').innerHTML = dados.foto
+    ? '<img src="' + dados.foto + '" style="width:100%; height:100%; object-fit:cover;">'
+    : '<i class="fa-solid fa-people-group" style="font-size:14px;"></i>';
 
   escutarGruposComunidade();
 }
