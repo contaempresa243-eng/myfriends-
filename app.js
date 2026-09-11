@@ -2059,15 +2059,27 @@ function guardarPermissoesGrupo() {
     .catch((err) => console.error('Erro ao guardar permissões:', err));
 }
 
+// Verifica se a conversa está silenciada, respeitando a duração escolhida (expira sozinho)
+function estaSilenciado(chatId) {
+  const valor = window.localStorage.getItem('myfriens_silenciar_' + chatId);
+  if (!valor || valor === '0') return false;
+  if (valor === 'sempre' || valor === '1') return true; // '1' = valor antigo, tratado como "sempre"
+
+  const ateMillis = Number(valor);
+  if (!ateMillis || Date.now() >= ateMillis) {
+    window.localStorage.removeItem('myfriens_silenciar_' + chatId);
+    return false;
+  }
+  return true;
+}
+
 function atualizarDetalhesNotificacao() {
-  const silenciado = window.localStorage.getItem('myfriens_silenciar_' + currentChatId) === '1';
-  document.getElementById('detalhes-grupo-notif-estado').innerText = silenciado ? 'Desativadas' : 'Ativadas';
+  document.getElementById('detalhes-grupo-notif-estado').innerText = estaSilenciado(currentChatId) ? 'Desativadas' : 'Ativadas';
 }
 
 function abrirNotificacoesGrupo() {
   fecharDetalhesGrupo();
-  const silenciado = window.localStorage.getItem('myfriens_silenciar_' + currentChatId) === '1';
-  document.getElementById('notif-desativar').checked = silenciado;
+  document.getElementById('notif-desativar').checked = estaSilenciado(currentChatId);
 
   const tipo = window.localStorage.getItem('myfriens_notif_tipo_' + currentChatId) || 'todas';
   document.getElementById('notif-tipo-label').innerText = tipo === 'todas' ? 'Todas' : 'Destaques';
@@ -2091,10 +2103,15 @@ function fecharNotificacoesGrupo() {
   document.getElementById('group-notifications-screen').classList.add('hidden');
 }
 
+// O interruptor do ecrã de Notificações também abre o mesmo modal de duração ao ligar
 function alternarNotificacaoGrupo() {
-  const desativar = document.getElementById('notif-desativar').checked;
-  window.localStorage.setItem('myfriens_silenciar_' + currentChatId, desativar ? '1' : '0');
-  atualizarDetalhesNotificacao();
+  const checkbox = document.getElementById('notif-desativar');
+  if (checkbox.checked) {
+    abrirDesativarNotificacaoModal(true);
+  } else {
+    window.localStorage.removeItem('myfriens_silenciar_' + currentChatId);
+    atualizarDetalhesNotificacao();
+  }
 }
 
 // ---- Notificar: Todas / Destaques ----
@@ -2300,7 +2317,7 @@ function processarNotificacaoRecebida(chatId, msg) {
   const chatAberto = currentChatId === chatId && document.getElementById('chat-room-screen').style.display === 'flex';
   if (chatAberto) return;
 
-  if (window.localStorage.getItem('myfriens_silenciar_' + chatId) === '1') return;
+  if (estaSilenciado(chatId)) return;
 
   const tipo = window.localStorage.getItem('myfriens_notif_tipo_' + chatId) || 'todas';
   if (tipo === 'destaques') {
@@ -2609,17 +2626,20 @@ function bloquearConversa() {
 
 // ---- Desativar/ativar notificação (preferência local por conversa) ----
 function toggleNotificacao() {
-  const chave = 'myfriens_silenciar_' + currentChatId;
-  const silenciadoAgora = window.localStorage.getItem(chave) === '1';
-  window.localStorage.setItem(chave, silenciadoAgora ? '0' : '1');
   fecharChatMenu();
+  if (estaSilenciado(currentChatId)) {
+    window.localStorage.removeItem('myfriens_silenciar_' + currentChatId);
+    atualizarTextoNotificacao();
+    atualizarDetalhesNotificacao();
+  } else {
+    abrirDesativarNotificacaoModal(false);
+  }
 }
 
 function atualizarTextoNotificacao() {
   const el = document.getElementById('item-notificacao');
   if (!el || !currentChatId) return;
-  const silenciado = window.localStorage.getItem('myfriens_silenciar_' + currentChatId) === '1';
-  el.innerText = silenciado ? 'Ativar notificação' : 'Desativar notificação';
+  el.innerText = estaSilenciado(currentChatId) ? 'Ativar notificação' : 'Desativar notificação';
 }
 
 // ---- Pesquisar nesta conversa ----
@@ -3811,4 +3831,67 @@ function atualizarLabelDigitando() {
   } else {
     el.innerText = 'Várias pessoas a escrever...';
   }
+}
+
+// ================= MODAL: DESATIVAR NOTIFICAÇÕES DE MENSAGENS (com duração) =================
+const opcoesSilenciar = [
+  { id: '8h', nome: '8 horas' },
+  { id: '1semana', nome: '1 semana' },
+  { id: 'sempre', nome: 'Sempre' }
+];
+let silenciarDuracaoSelecionada = '8h';
+let silenciarModalVeioDoSwitch = false;
+
+// origemSwitch: true quando aberto a partir do interruptor do ecrã de Notificações (para o repor se cancelar)
+function abrirDesativarNotificacaoModal(origemSwitch) {
+  fecharChatMenu();
+  silenciarModalVeioDoSwitch = !!origemSwitch;
+  silenciarDuracaoSelecionada = '8h';
+  renderizarOpcoesSilenciar();
+  document.getElementById('notificacao-desativar-modal').classList.remove('hidden');
+}
+
+function renderizarOpcoesSilenciar() {
+  const lista = document.getElementById('lista-opcoes-silenciar');
+  lista.innerHTML = '';
+  opcoesSilenciar.forEach((op) => {
+    const marcado = op.id === silenciarDuracaoSelecionada;
+    const item = document.createElement('div');
+    item.style.cssText = 'display:flex; align-items:center; gap:14px; padding:10px 0; cursor:pointer;';
+    item.innerHTML =
+      '<span class="fa-solid ' + (marcado ? 'fa-circle-dot' : 'fa-circle') + '" style="color:' + (marcado ? 'var(--whatsapp-teal)' : '#ccc') + '; font-size:18px;"></span>' +
+      '<span style="color:#111; font-size:15px;">' + op.nome + '</span>';
+    item.onclick = () => { silenciarDuracaoSelecionada = op.id; renderizarOpcoesSilenciar(); };
+    lista.appendChild(item);
+  });
+}
+
+function fecharDesativarNotificacaoModal() {
+  document.getElementById('notificacao-desativar-modal').classList.add('hidden');
+  // Se veio do interruptor e foi cancelado, repõe-o em "desligado" já que nada foi aplicado
+  if (silenciarModalVeioDoSwitch) {
+    const checkbox = document.getElementById('notif-desativar');
+    if (checkbox) checkbox.checked = false;
+  }
+}
+
+function confirmarDesativarNotificacao() {
+  let valor;
+  if (silenciarDuracaoSelecionada === 'sempre') {
+    valor = 'sempre';
+  } else if (silenciarDuracaoSelecionada === '1semana') {
+    valor = String(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  } else {
+    valor = String(Date.now() + 8 * 60 * 60 * 1000);
+  }
+
+  window.localStorage.setItem('myfriens_silenciar_' + currentChatId, valor);
+  document.getElementById('notificacao-desativar-modal').classList.add('hidden');
+
+  const checkbox = document.getElementById('notif-desativar');
+  if (checkbox) checkbox.checked = true;
+
+  atualizarTextoNotificacao();
+  atualizarDetalhesNotificacao();
+  mostrarToast('Notificações desativadas');
 }

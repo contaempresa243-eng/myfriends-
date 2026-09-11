@@ -779,6 +779,19 @@
     </div>
   </div>
 
+  <!-- Modal: Desativar notificações de mensagens (com duração) -->
+  <div id="notificacao-desativar-modal" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:520; display:flex; align-items:center; justify-content:center; padding:24px;">
+    <div style="background:#fff; border-radius:12px; width:100%; max-width:340px; padding:22px 20px;">
+      <h3 style="color:#111; font-size:19px; margin-bottom:14px; line-height:1.3;">Desativar notificações de mensagens</h3>
+      <p style="color:#3b4a54; font-size:13px; line-height:1.5; margin-bottom:16px;">Os outros membros não vão ver que desativou as notificações desta conversa. Vai continuar a receber notificações se o seu nome for mencionado.</p>
+      <div id="lista-opcoes-silenciar" style="margin-bottom:20px;"></div>
+      <div style="display:flex; justify-content:flex-end; gap:22px;">
+        <button onclick="fecharDesativarNotificacaoModal()" style="background:none; border:none; color:var(--whatsapp-teal); font-weight:bold; font-size:13px; cursor:pointer;">CANCELAR</button>
+        <button onclick="confirmarDesativarNotificacao()" style="background:none; border:none; color:var(--whatsapp-teal); font-weight:bold; font-size:13px; cursor:pointer;">OK</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Modal: Notificar (Todas / Destaques) -->
   <div id="notificar-modal" class="hidden" style="position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:500; display:flex; align-items:flex-end; justify-content:center;">
     <div style="background:var(--whatsapp-panel); width:100%; max-width:480px; border-radius:16px 16px 0 0; padding:20px;">
