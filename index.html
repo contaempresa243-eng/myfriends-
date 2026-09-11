@@ -343,7 +343,7 @@
         <div class="chat-menu-item" onclick="abrirFicheirosLigacoes()">Ficheiros do grupo</div>
         <div class="chat-menu-item" id="item-notificacao" onclick="toggleNotificacao()">Desativar notificações</div>
         <div class="chat-menu-item" onclick="abrirMensagensTemporarias()">Mensagens temporárias</div>
-        <div class="chat-menu-item" onclick="acaoMenuChat('tema')">Tema da conversa</div>
+        <div class="chat-menu-item" onclick="abrirTemaConversa()">Tema da conversa</div>
         <div class="chat-menu-item" onclick="toggleChatMenuMais(event)" style="display:flex; justify-content:space-between; align-items:center;">
           Mais <span class="fa-solid fa-chevron-right" style="font-size:11px; color:#8696a0;"></span>
         </div>
@@ -536,6 +536,50 @@
         <span class="fa-solid fa-phone-slash" style="color:#fff; font-size:22px;"></span>
       </div>
     </div>
+  </div>
+
+  <!-- Ecrã: Tema da conversa -->
+  <div id="tema-conversa-screen" class="hidden" style="position:fixed; inset:0; background:#fff; z-index:520; display:flex; flex-direction:column; overflow-y:auto;">
+    <div style="display:flex; align-items:center; justify-content:space-between; padding:16px; border-bottom:1px solid #eee; position:relative;">
+      <div style="display:flex; align-items:center; gap:16px;">
+        <span class="fa-solid fa-arrow-left" onclick="fecharTemaConversa()" style="color:#111; cursor:pointer; font-size:18px;"></span>
+        <h3 style="color:#111; font-size:18px;">Tema da conversa</h3>
+      </div>
+      <span class="fa-solid fa-ellipsis-vertical" onclick="toggleTemaConversaMenu(event)" style="color:#111; cursor:pointer;"></span>
+
+      <div id="tema-conversa-menu" class="hidden" style="position:absolute; top:48px; right:12px; background:#fff; border-radius:8px; box-shadow:0 4px 14px rgba(0,0,0,0.3); z-index:10; overflow:hidden;">
+        <div onclick="reporTema()" style="display:flex; align-items:center; gap:12px; padding:12px 18px; cursor:pointer; white-space:nowrap;">
+          <span class="fa-solid fa-rotate-left" style="color:#3b4a54;"></span>
+          <span style="color:#111; font-size:14px;">Repor tema</span>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:16px 20px;">
+      <p style="color:#667781; font-size:13px; font-weight:bold; margin-bottom:12px;">Temas</p>
+      <div id="lista-temas-preset" style="display:flex; gap:12px; overflow-x:auto; padding-bottom:8px;"></div>
+
+      <p style="color:#667781; font-size:13px; margin:18px 0;">O balão de conversa e o fundo vão mudar.</p>
+
+      <p style="color:#667781; font-size:13px; font-weight:bold; margin:18px 0 4px;">Personalizar</p>
+      <div onclick="abrirCoresSolidas('balao')" style="display:flex; align-items:center; gap:14px; padding:14px 0; cursor:pointer; border-bottom:1px solid #f0f0f0;">
+        <span class="fa-regular fa-comment" style="color:#3b4a54; width:18px;"></span>
+        <span style="color:#111; font-size:14px;">Balão de conversa</span>
+      </div>
+      <div onclick="abrirCoresSolidas('fundo')" style="display:flex; align-items:center; gap:14px; padding:14px 0; cursor:pointer;">
+        <span class="fa-regular fa-images" style="color:#3b4a54; width:18px;"></span>
+        <span style="color:#111; font-size:14px;">Fundo</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Ecrã: Cores sólidas (usado tanto para o Balão como para o Fundo) -->
+  <div id="cores-solidas-screen" class="hidden" style="position:fixed; inset:0; background:#fff; z-index:530; display:flex; flex-direction:column; overflow-y:auto;">
+    <div style="display:flex; align-items:center; gap:16px; padding:16px; border-bottom:1px solid #eee;">
+      <span class="fa-solid fa-arrow-left" onclick="fecharCoresSolidas()" style="color:#111; cursor:pointer; font-size:18px;"></span>
+      <h3 style="color:#111; font-size:18px;">Cores sólidas</h3>
+    </div>
+    <div id="grelha-cores-solidas" style="display:grid; grid-template-columns:1fr 1fr; gap:14px; padding:18px;"></div>
   </div>
 
   <!-- Ecrã de Detalhes do grupo -->

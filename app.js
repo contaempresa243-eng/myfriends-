@@ -871,6 +871,8 @@ let chatApenasAdminsAtual = false;
 let chatAdminsAtual = [];
 let chatAvatarAtual = '';
 let chatFotoAtual = '';
+let temaFundoAtual = '';
+let temaBalaoAtual = '';
 
 // Mensagens temporárias: duração ativa (em segundos) para o chat atualmente aberto
 let chatTemporariasDuracaoAtual = 0;
@@ -888,6 +890,10 @@ function openChat(chatId, chatName, outroEmail, extra) {
   comunidadeIdAtual = (extra && extra.comunidadeId) || null;
   chatApenasAdminsAtual = !!(extra && extra.apenasAdmins);
   chatAdminsAtual = (extra && extra.admins) || [];
+
+  temaFundoAtual = window.localStorage.getItem('myfriens_tema_fundo_' + chatId) || '';
+  temaBalaoAtual = window.localStorage.getItem('myfriens_tema_balao_' + chatId) || '';
+  aplicarTemaConversa();
 
   document.getElementById('main-screen').style.display = 'none';
   document.getElementById('community-screen').style.display = 'none';
@@ -920,6 +926,8 @@ function closeChat() {
   fecharChatMenu();
   fecharChatMenuMais();
   fecharGroupCallMenu();
+  fecharTemaConversa();
+  fecharCoresSolidas();
   fecharPesquisaMensagens();
   fecharMediaModal();
   pararEscutaChamadasRecebidas();
@@ -1152,9 +1160,12 @@ function loadMessages() {
         linha.style.cssText = 'display:flex; width:100%; padding:2px 0; ' + (isMe ? 'justify-content:flex-end;' : 'justify-content:flex-start;');
 
         const bubble = document.createElement('div');
+        const corBalaoSaida = temaBalaoAtual || 'var(--whatsapp-outgoing)';
+        const corTextoSaida = temaBalaoAtual ? corTextoParaFundo(temaBalaoAtual) : '#111';
+        if (isMe) bubble.dataset.outgoing = '1';
         bubble.style.cssText = `
-          background: ${isMe ? 'var(--whatsapp-outgoing)' : 'var(--whatsapp-incoming)'};
-          color: #111;
+          background: ${isMe ? corBalaoSaida : 'var(--whatsapp-incoming)'};
+          color: ${isMe ? corTextoSaida : '#111'};
           padding: ${(msg.type === 'imagem' || msg.type === 'audio') ? '4px' : '8px 12px'};
           border-radius: 7px;
           max-width: 70%;
@@ -3894,4 +3905,139 @@ function confirmarDesativarNotificacao() {
   atualizarTextoNotificacao();
   atualizarDetalhesNotificacao();
   mostrarToast('Notificações desativadas');
+}
+
+// ================= TEMA DA CONVERSA =================
+// Guardado por conversa em localStorage. Os 10 tons vêm diretamente das imagens
+// enviadas pelo Aldair ("Cores sólidas" do WhatsApp).
+const coresFundoDisponiveis = [
+  '#1c252b', '#341b35', '#e3e7e8', '#fdfa9e',
+  '#d9764f', '#5c454b', '#4d8b83', '#2f90c4',
+  '#33518c', '#4a5568'
+];
+
+let corSolidaAlvoAtual = 'fundo'; // 'fundo' | 'balao'
+
+// Decide se o texto deve ser escrito a preto ou a branco consoante o brilho da cor de fundo
+function corTextoParaFundo(hex) {
+  if (!hex) return '#111';
+  const h = hex.replace('#', '');
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  const luminancia = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminancia > 0.6 ? '#111' : '#fff';
+}
+
+// Aplica o fundo da conversa e recolore as bolhas já desenhadas (sem recarregar as mensagens)
+function aplicarTemaConversa() {
+  const tela = document.getElementById('chat-room-screen');
+  if (tela) tela.style.background = temaFundoAtual || 'var(--whatsapp-chat-bg)';
+
+  const corBalao = temaBalaoAtual || 'var(--whatsapp-outgoing)';
+  const corTexto = temaBalaoAtual ? corTextoParaFundo(temaBalaoAtual) : '#111';
+  document.querySelectorAll('#messages-container [data-outgoing="1"]').forEach((bolha) => {
+    bolha.style.background = corBalao;
+    bolha.style.color = corTexto;
+  });
+}
+
+function abrirTemaConversa() {
+  fecharChatMenu();
+  fecharChatMenuMais();
+  renderizarTemasPreset();
+  document.getElementById('tema-conversa-screen').classList.remove('hidden');
+}
+
+function fecharTemaConversa() {
+  document.getElementById('tema-conversa-screen').classList.add('hidden');
+  document.getElementById('tema-conversa-menu').classList.add('hidden');
+}
+
+function toggleTemaConversaMenu(event) {
+  if (event) event.stopPropagation();
+  document.getElementById('tema-conversa-menu').classList.toggle('hidden');
+}
+
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('tema-conversa-menu');
+  if (!menu || menu.classList.contains('hidden')) return;
+  const noBotao = e.target.classList && e.target.classList.contains('fa-ellipsis-vertical');
+  if (!menu.contains(e.target) && !noBotao) menu.classList.add('hidden');
+});
+
+function reporTema() {
+  document.getElementById('tema-conversa-menu').classList.add('hidden');
+  window.localStorage.removeItem('myfriens_tema_fundo_' + currentChatId);
+  window.localStorage.removeItem('myfriens_tema_balao_' + currentChatId);
+  temaFundoAtual = '';
+  temaBalaoAtual = '';
+  aplicarTemaConversa();
+  renderizarTemasPreset();
+  mostrarToast('Tema reposto');
+}
+
+function renderizarTemasPreset() {
+  const lista = document.getElementById('lista-temas-preset');
+  if (!lista) return;
+  lista.innerHTML = '';
+
+  coresFundoDisponiveis.forEach((cor) => {
+    const marcado = cor === temaFundoAtual;
+    const card = document.createElement('div');
+    card.style.cssText = 'position:relative; flex-shrink:0; width:64px; height:88px; border-radius:10px; background:' + cor + '; cursor:pointer; border:' + (marcado ? '3px solid #111' : '1px solid #ddd') + '; overflow:hidden;';
+    card.innerHTML =
+      '<div style="position:absolute; top:8px; left:8px; right:14px; height:10px; background:rgba(255,255,255,0.7); border-radius:6px;"></div>' +
+      '<div style="position:absolute; top:24px; left:20px; right:8px; height:10px; background:' + (temaBalaoAtual || '#d9fdd3') + '; border-radius:6px;"></div>' +
+      (marcado ? '<div style="position:absolute; bottom:6px; right:6px; width:16px; height:16px; border-radius:50%; background:#111; display:flex; align-items:center; justify-content:center;"><span class="fa-solid fa-check" style="color:#fff; font-size:9px;"></span></div>' : '');
+    card.onclick = () => selecionarTemaPreset(cor);
+    lista.appendChild(card);
+  });
+}
+
+function selecionarTemaPreset(cor) {
+  window.localStorage.setItem('myfriens_tema_fundo_' + currentChatId, cor);
+  temaFundoAtual = cor;
+  aplicarTemaConversa();
+  renderizarTemasPreset();
+}
+
+function abrirCoresSolidas(alvo) {
+  corSolidaAlvoAtual = alvo;
+  renderizarGrelhaCoresSolidas();
+  document.getElementById('cores-solidas-screen').classList.remove('hidden');
+}
+
+function fecharCoresSolidas() {
+  document.getElementById('cores-solidas-screen').classList.add('hidden');
+}
+
+function renderizarGrelhaCoresSolidas() {
+  const grelha = document.getElementById('grelha-cores-solidas');
+  grelha.innerHTML = '';
+
+  coresFundoDisponiveis.forEach((cor) => {
+    const atual = corSolidaAlvoAtual === 'fundo' ? temaFundoAtual : temaBalaoAtual;
+    const marcado = cor === atual;
+    const swatch = document.createElement('div');
+    swatch.style.cssText = 'position:relative; height:130px; border-radius:12px; background:' + cor + '; cursor:pointer; border:' + (marcado ? '3px solid #111' : 'none') + ';';
+    if (marcado) {
+      swatch.innerHTML = '<span class="fa-solid fa-check" style="position:absolute; top:8px; right:10px; color:' + corTextoParaFundo(cor) + '; font-size:16px;"></span>';
+    }
+    swatch.onclick = () => selecionarCorSolida(cor);
+    grelha.appendChild(swatch);
+  });
+}
+
+function selecionarCorSolida(cor) {
+  if (corSolidaAlvoAtual === 'fundo') {
+    window.localStorage.setItem('myfriens_tema_fundo_' + currentChatId, cor);
+    temaFundoAtual = cor;
+  } else {
+    window.localStorage.setItem('myfriens_tema_balao_' + currentChatId, cor);
+    temaBalaoAtual = cor;
+  }
+  aplicarTemaConversa();
+  fecharCoresSolidas();
+  renderizarTemasPreset();
 }
