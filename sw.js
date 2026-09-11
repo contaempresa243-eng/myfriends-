@@ -1,4 +1,4 @@
-const CACHE_NAME = 'myfriens-v6';
+const CACHE_NAME = 'myfriens-v7';
 
 self.addEventListener('install', (e) => {
   self.skipWaiting();

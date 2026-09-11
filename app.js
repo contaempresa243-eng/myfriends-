@@ -1167,7 +1167,7 @@ function loadMessages() {
           background: ${isMe ? corBalaoSaida : 'var(--whatsapp-incoming)'};
           color: ${isMe ? corTextoSaida : '#111'};
           padding: ${(msg.type === 'imagem' || msg.type === 'audio') ? '4px' : '8px 12px'};
-          border-radius: 7px;
+          border-radius: 18px;
           max-width: 70%;
           font-size: 14px;
           word-break: break-word;
@@ -3916,6 +3916,11 @@ const coresFundoDisponiveis = [
   '#33518c', '#4a5568'
 ];
 
+// Cores extra que só aparecem no picker do Fundo (mais opções, sem alterar os 10 Temas nem o Balão)
+const coresFundoExtra = [
+  '#bfe3dc', '#a8d5ae', '#72c48c', '#c9d5ea', '#4fc9d0', '#4aa3a8'
+];
+
 let corSolidaAlvoAtual = 'fundo'; // 'fundo' | 'balao'
 
 // Decide se o texto deve ser escrito a preto ou a branco consoante o brilho da cor de fundo
@@ -3932,7 +3937,17 @@ function corTextoParaFundo(hex) {
 // Aplica o fundo da conversa e recolore as bolhas já desenhadas (sem recarregar as mensagens)
 function aplicarTemaConversa() {
   const tela = document.getElementById('chat-room-screen');
-  if (tela) tela.style.background = temaFundoAtual || 'var(--whatsapp-chat-bg)';
+  if (tela) {
+    if (temaFundoAtual && temaFundoAtual.indexOf('http') === 0) {
+      tela.style.backgroundImage = 'url(' + temaFundoAtual + ')';
+      tela.style.backgroundSize = 'cover';
+      tela.style.backgroundPosition = 'center';
+      tela.style.backgroundColor = '';
+    } else {
+      tela.style.backgroundImage = '';
+      tela.style.background = temaFundoAtual || 'var(--whatsapp-chat-bg)';
+    }
+  }
 
   const corBalao = temaBalaoAtual || 'var(--whatsapp-outgoing)';
   const corTexto = temaBalaoAtual ? corTextoParaFundo(temaBalaoAtual) : '#111';
@@ -4004,6 +4019,8 @@ function selecionarTemaPreset(cor) {
 
 function abrirCoresSolidas(alvo) {
   corSolidaAlvoAtual = alvo;
+  const btnGaleria = document.getElementById('cores-solidas-galeria-btn');
+  if (btnGaleria) btnGaleria.classList.toggle('hidden', alvo !== 'fundo');
   renderizarGrelhaCoresSolidas();
   document.getElementById('cores-solidas-screen').classList.remove('hidden');
 }
@@ -4016,7 +4033,9 @@ function renderizarGrelhaCoresSolidas() {
   const grelha = document.getElementById('grelha-cores-solidas');
   grelha.innerHTML = '';
 
-  coresFundoDisponiveis.forEach((cor) => {
+  const cores = corSolidaAlvoAtual === 'fundo' ? coresFundoDisponiveis.concat(coresFundoExtra) : coresFundoDisponiveis;
+
+  cores.forEach((cor) => {
     const atual = corSolidaAlvoAtual === 'fundo' ? temaFundoAtual : temaBalaoAtual;
     const marcado = cor === atual;
     const swatch = document.createElement('div');
@@ -4041,3 +4060,42 @@ function selecionarCorSolida(cor) {
   fecharCoresSolidas();
   renderizarTemasPreset();
 }
+
+// Fundo personalizado a partir de uma foto da galeria do dispositivo
+function enviarFotoFundoConversa(file) {
+  mostrarToast('A carregar imagem...');
+  const chatIdAlvo = currentChatId;
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+  fetch('https://api.cloudinary.com/v1_1/' + CLOUDINARY_CLOUD_NAME + '/auto/upload', { method: 'POST', body: formData })
+    .then((res) => res.json())
+    .then((data) => {
+      if (!data.secure_url) throw new Error((data.error && data.error.message) || 'Falha no upload');
+      window.localStorage.setItem('myfriens_tema_fundo_' + chatIdAlvo, data.secure_url);
+      if (currentChatId === chatIdAlvo) {
+        temaFundoAtual = data.secure_url;
+        aplicarTemaConversa();
+        renderizarTemasPreset();
+      }
+      fecharCoresSolidas();
+      mostrarToast('Fundo atualizado');
+    })
+    .catch((err) => {
+      console.error('Erro ao definir fundo personalizado:', err);
+      mostrarToast('Não foi possível definir o fundo. Tenta novamente.');
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const inputTemaFundo = document.getElementById('input-tema-fundo-galeria');
+  if (inputTemaFundo) {
+    inputTemaFundo.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      e.target.value = '';
+      if (!file || !currentChatId) return;
+      enviarFotoFundoConversa(file);
+    });
+  }
+});
